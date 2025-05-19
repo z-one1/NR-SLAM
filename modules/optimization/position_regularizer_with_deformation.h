@@ -24,24 +24,29 @@
 
 #include "g2o/core/base_binary_edge.h"
 
+// 继承自 g2o::BaseBinaryEdge，误差维度为1（标量误差），连接两个 LandmarkVertex
 class PositionRegularizerWithDeformation : public g2o::BaseBinaryEdge<1, double,
         LandmarkVertex, LandmarkVertex> {
 public:
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW // Eigen 宏，内存对齐
 
     PositionRegularizerWithDeformation();
 
     bool read(std::istream& is);
-
     bool write(std::ostream& os) const;
 
-    void computeError();
+    void computeError(); // 计算当前误差
 
-    virtual void linearizeOplus();
+    virtual void linearizeOplus(); // 计算 误差对顶点（Landmark）的雅可比矩阵（Jacobian）
 
-    Eigen::Vector3d rest_position_1_, rest_position_2_;
-    double k_;
+    Eigen::Vector3d rest_position_1_, rest_position_2_; // 两个点的“静止位置”（未变形时的位置）
+    double k_; // 弹性系数
 };
 
 
 #endif //NRSLAM_POSITION_REGULARIZER_WITH_DEFORMATION_H
+/*
+    边（Edge）必须实现的函数
+    1. computeError() 作用：计算当前误差（优化目标是最小化该误差）
+    2. linearizeOplus() 作用：计算误差对顶点的雅可比矩阵（用于优化求解）
+*/

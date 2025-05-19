@@ -22,24 +22,29 @@
 #include "g2o/stuff/misc.h"
 #include "g2o/core/factory.h"
 
+// 初始化顶点，调用基类 BaseVertex 的构造函数
 LandmarkVertex::LandmarkVertex() : BaseVertex<3, Eigen::Vector3d>() {}
 
+// 从输入流读取顶点数据
 bool LandmarkVertex::read(std::istream& is) {
     is >> _estimate(0 ), _estimate(1 ), _estimate(2 );
     return true;
 }
 
+// 将顶点数据写入输出流
 bool LandmarkVertex::write(std::ostream& os) const {
     return g2o::internal::writeVector(os, estimate());
 }
 
+// 重置顶点到初始状态
 void LandmarkVertex::setToOriginImpl() {
     _estimate.fill(0);
 }
 
+// 
 void LandmarkVertex::oplusImpl(const double *update) {
-    Eigen::Map<const Eigen::Vector3d> v(update);
+    Eigen::Map<const Eigen::Vector3d> v(update); // 将 double* 数组映射为 Eigen:;Vector3d 方便运算
     _estimate += v;
 }
 
-G2O_REGISTER_TYPE(VERTEX_LANDMARK, LandmarkVertex);
+G2O_REGISTER_TYPE(VERTEX_LANDMARK, LandmarkVertex); // 注册顶点类型

@@ -42,7 +42,7 @@ Simulation::Simulation(const std::string &dataset_path) {
     names_file_reader.open(dataset_path + "/rgb.txt");
 
     if(!names_file_reader.is_open()){
-        LOG(FATAL) << "could not open names file at: " << dataset_path + "/names.txt";
+        LOG(FATAL) << "could not open names file at: " << dataset_path + "/rgb.txt";
         return;
     }
 
@@ -51,7 +51,9 @@ Simulation::Simulation(const std::string &dataset_path) {
     while(!names_file_reader.eof()){
         string image_name;
         getline(names_file_reader, image_name);
-        images_names_.push_back(image_name);
+        if (!image_name.empty()) {
+            images_names_.push_back(dataset_path + "/" + image_name);
+        }
     }
 
     names_file_reader.close();
@@ -69,7 +71,9 @@ Simulation::Simulation(const std::string &dataset_path) {
     while(!depth_names_reader.eof()){
         string image_name;
         getline(depth_names_reader, image_name);
-        depth_images_names_.push_back(image_name);
+        if(!image_name.empty()){
+            depth_images_names_.push_back(dataset_path + "/" + image_name);
+        }
     }
 
     depth_names_reader.close();
