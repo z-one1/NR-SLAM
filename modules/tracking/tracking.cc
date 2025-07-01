@@ -105,6 +105,27 @@ void Tracking::TrackImage(const cv::Mat &im, const absl::flat_hash_map<std::stri
 
         // KeyFrame insertion.
         KeyFrameInsertion(im, masks);
+        auto pose_se3 = current_frame_->CameraTransformationWorld();
+        auto pose_t = pose_se3.translation();
+        auto pose_q = pose_se3.so3().unit_quaternion();
+        // 保存当前帧的位姿到 CSV 文件
+        {
+            // 定义 CSV 文件路径（可根据需要修改）
+            std::string csv_filename = "camera_poses.csv";
+            // 以追加模式打开文件
+            std::ofstream ofs(csv_filename, std::ios::app);
+            if (ofs.is_open()) {
+                // 如果 current_frame_ 有时间戳或帧号，以下示例假设有 GetTimestamp() 方法
+                // 若没有，可替换为其他表示帧号或固定数值
+                ofs << pose_t.x() << "," << pose_t.y() << "," << pose_t.z() << ","
+                    // 注意：这里假设表格格式为 (rX, rY, rZ, rW) ，而 Eigen::Quaternionf 的存储顺序为 (w, x, y, z)
+                    << pose_q.x() << "," << pose_q.y() << "," << pose_q.z() << "," << pose_q.w() 
+                    << "\n";
+                ofs.close();
+            } else {
+                std::cerr << "Failed to open " << csv_filename << " for writing." << std::endl;
+            }
+        }
 
         poses.push_back(current_frame_->CameraTransformationWorld());
         LOG(INFO) << "Num Poses: " << poses.size() << endl;

@@ -47,14 +47,14 @@ public:
 
     struct Edge {
         ID vertex_id_1;
-        ID vertex_id_2;
-        float distance;
-        float first_distance;
-        float weight;
-        Status status;
+        ID vertex_id_2; // 连接的两个地图点的ID 
+        float distance; // 当前两个地图点的距离
+        float first_distance; // 初始距离
+        float weight; // 权重：根据距离和sigma计算出
+        Status status; 
         float max_distance;
         float min_distance;
-        Eigen::Vector3f last_relative_position;
+        Eigen::Vector3f last_relative_position; // 上次的相对位置
     };
 
     RegularizationGraph() = delete;
@@ -63,12 +63,14 @@ public:
 
     void SetSigma(const float sigma);
 
+    // 给定两个地图点的 ID 和它们的当前相对位置，向图中添加一条边。
     void AddEdge(ID mappoint_id, ID mappoint_id_other, Eigen::Vector3f& relative_position);
 
     std::shared_ptr<Edge> GetEdge(ID mappoint_id, ID mappoint_id_other);
 
     std::vector<std::pair<ID, std::shared_ptr<Edge>>> GetEdges(ID mappoint_id) const;
 
+    // 当地图点的位姿或者观测信息发生变化时，更新正则化图中对应的边或顶点的状态
     bool UpdateConnection(ID mappoint_id_1, ID mappoint_id_2, Eigen::Vector3f& landmark_position_1,
                           Eigen::Vector3f& landmark_position_2);
 
@@ -78,6 +80,7 @@ public:
 
     typedef absl::btree_map<ID, std::shared_ptr<Edge>> VertexConnections;
 
+    // 根据给定的地图点集合和所需的邻居数量，提取零阶、一级及二级邻居关系信息
     void GetOptimizationNeighbours(const std::vector<ID>& mappoints_ids, const int connections_per_point,
                                    absl::flat_hash_map<ID, absl::flat_hash_set<ID>>& zero_order_connections,
                                    absl::flat_hash_map<ID, absl::flat_hash_set<ID>>& first_order_connections,

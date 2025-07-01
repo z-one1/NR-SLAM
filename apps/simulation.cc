@@ -29,10 +29,10 @@
 
 using namespace std;
 
-ABSL_FLAG(std::string, dataset_path, "", "Path to the video dataset");
-ABSL_FLAG(std::string, settings_path, "", "Path to the settings file");
-ABSL_FLAG(int, starting_frame, 0, "First frame of the dataset to process");
-ABSL_FLAG(int, end_frame, 0, "Last frame of the dataset to process");
+ABSL_FLAG(std::string, dataset_path, "/home/zy/Dataset/EndoMapper/Simulated Sequences/Seq_0", "Path to the video dataset");
+ABSL_FLAG(std::string, settings_path, "/home/zy/NR-SLAM/data/simulation/settings.yaml", "Path to the settings file");
+ABSL_FLAG(int, starting_frame, 50, "First frame of the dataset to process");
+ABSL_FLAG(int, end_frame, 280, "Last frame of the dataset to process");
 
 int main(int argc, char **argv) {
     // Parse command line argumemnts.
