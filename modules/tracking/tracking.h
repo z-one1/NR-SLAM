@@ -33,6 +33,8 @@
 
 #include "absl/container/flat_hash_set.h"
 
+#include <opencv2/opencv.hpp>
+
 class Tracking {
 public:
     struct Options {
@@ -67,6 +69,12 @@ public:
 
     TrackingStatus GetTrackingStatus() const;
 
+    std::vector<Sophus::SE3f> GetCameraPoses();
+
+    //! Edited 06.03
+    void EstimateDeformationField();
+    void ComputeRigidWeights();
+
 private:
     void ExtractFeatures(const cv::Mat& im, const cv::Mat& mask,
                          std::vector<cv::KeyPoint>& keypoints);
@@ -84,6 +92,7 @@ private:
     void CameraPoseEstimation();
 
     absl::flat_hash_set<ID> CameraPoseAndDeformationEstimation();
+    absl::flat_hash_set<ID> CameraPoseAndDeformationEstimationFinal();
 
     void KeyFrameInsertion(const cv::Mat& im, const absl::flat_hash_map<std::string, cv::Mat>& masks);
 
@@ -128,6 +137,9 @@ private:
     Sophus::SE3f previous_camera_transform_world_;
 
     TimeProfiler* time_profiler_;
+
+    std::vector<Sophus::SE3f> poses;
+
 };
 
 

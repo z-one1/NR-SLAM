@@ -118,6 +118,40 @@ std::vector <Eigen::Vector3f> Frame::GetLandmarkPositionsWithStatus(
     return landmark_positions;
 }
 
+std::vector<float> Frame::GetRigidWeightsWithStatus(
+    const absl::flat_hash_set<LandmarkStatus> statuses) const {
+    
+    std::vector<float> selected_weights;
+
+    for (int idx = 0; idx < landmark_status_.size(); ++idx) {
+        if (statuses.contains(landmark_status_[idx])) {
+            if (idx < rigid_weights_.size()) {
+                selected_weights.push_back(rigid_weights_[idx]);
+            } else {
+                selected_weights.push_back(1.0f);
+            }
+        }
+    }
+    return selected_weights;
+}
+
+std::vector<Eigen::Vector3f>& Frame::MutableDeformations() {
+    return current_deformations_;
+}
+
+const std::vector<Eigen::Vector3f>& Frame::Deformations() const {
+    return current_deformations_;
+}
+
+std::vector<float>& Frame::MutableRigidWeights() {
+    return rigid_weights_;
+}
+
+const std::vector<float>& Frame::RigidWeights() const {
+    return rigid_weights_;
+}
+
+
 std::vector<LandmarkStatus>& Frame::LandmarkStatuses() {
     return landmark_status_;
 }

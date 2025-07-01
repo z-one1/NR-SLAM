@@ -185,6 +185,11 @@ int LucasKanadeTracker::Track(const Mat &newIm, std::vector<KeyPoint> &nextPts,
 
     const int borderGap = round(winSize_.width/2) + 1;
 
+    int initial_usable = std::count_if(vMatched.begin(), vMatched.end(), [](const auto& s) {
+        return IsUsable(s);
+    });
+    LOG(INFO) << "[LK] Initial usable points: " << initial_usable;
+
     //Start Lucas-Kanade optical flow algorithm
     //First iterate over pyramid levels
     for (int level = maxLevel_; level >= 0; level--) {
@@ -460,12 +465,20 @@ int LucasKanadeTracker::Track(const Mat &newIm, std::vector<KeyPoint> &nextPts,
                 prevDelta = delta;
             }
         }
+        int level_usable = std::count_if(vMatched.begin(), vMatched.end(), [](const auto& s) {
+            return IsUsable(s);
+        });
+        LOG(INFO) << "[LK] After level " << level << ": usable points = " << level_usable;        
     }
 
     int toReturn = 0;
 
     const cv::Mat J = newPyr[0].clone();
 
+    int before_ssim = std::count_if(vMatched.begin(), vMatched.end(), [](const auto& s) {
+        return IsUsable(s);
+    });
+    
     //Check outliers with SSIM
     const float C1 = (0.01 * 255)*(0.01 * 255), C2 = (0.03 * 255)*(0.03 * 255);
     const float N_inv = 1.f / (float)winSize_.area(), N_inv_1 = 1.f / (float) (winSize_.area() - 1);
@@ -591,6 +604,7 @@ int LucasKanadeTracker::Track(const Mat &newIm, std::vector<KeyPoint> &nextPts,
         }
     }
 
+    LOG(INFO) << "[LK] Before SSIM check: " << before_ssim << ", After SSIM: " << toReturn;
 
     return toReturn;
 }

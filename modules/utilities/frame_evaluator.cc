@@ -141,7 +141,7 @@ std::tuple<float, float> FrameEvaluator::ComputeRMSEWithScaleAlignment(const std
         errors.push_back(fabs(estimated_depths[idx] - ground_truth_depths[idx]));
     }
 
-    // Compute inter-quartile range
+    // Compute inter-quartile range 
     vector<float> sorted_errors = errors;
     sort(sorted_errors.begin(), sorted_errors.end());
     float interquartileRange = sorted_errors[(int)(sorted_errors.size() * 0.75f)] - sorted_errors[(int)(sorted_errors.size() * 0.25f)];
@@ -173,7 +173,6 @@ std::tuple<float, float> FrameEvaluator::ComputeRMSEWithScaleAlignment(const std
 
     CHECK(!estimated_depths_eigen.hasNaN());
     CHECK(!ground_truth_depths_eigen.hasNaN());
-
     CHECK(!HasInf(estimated_depths_eigen));
     CHECK(!HasInf(ground_truth_depths_eigen));
 
@@ -284,7 +283,6 @@ void FrameEvaluator::SaveResultsToFile() {
     for (auto error : computed_rmse_) {
         results_file << error << endl;
     }
-
     results_file.close();
 }
 

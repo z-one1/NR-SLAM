@@ -48,7 +48,6 @@ image_visualizer_(image_visualizer), tracking_status_(NOT_INITIALIZED), time_pro
                                       options_.klt_epsilon, options_.klt_min_eig_th);
 
     current_frame_ = make_shared<Frame>();
-
     current_frame_->SetCalibration(calibration);
 
     MonocularMapInitializer::Options monocular_map_initializer_options;
@@ -86,20 +85,29 @@ void Tracking::TrackImage(const cv::Mat &im, const absl::flat_hash_map<std::stri
         // Update points triangulated by the mapping in the last frame.
         UpdateTriangulatedPoints();
 
+        LOG(INFO) << "Num of Keypoints 1: " << current_frame_->GetKeypointsWithStatus({TRACKED_WITH_3D}).size();
         // Otherwise perform normal tracking.
         // Depending on the type of sequence, the mask type used can be different.
         // absl::flat_hash_set<ID> lost_mappoint_ids = TrackCameraAndDeformation(im, masks.at("BorderFilter"));
         absl::flat_hash_set<ID> lost_mappoint_ids = TrackCameraAndDeformation(im, masks.at("Global"));
 
+        LOG(INFO) << "Num of Keypoints 2: " << current_frame_->GetKeypointsWithStatus({TRACKED_WITH_3D}).size();
+
         // Point reuse.
         PointReuse(im, cv::Mat(), lost_mappoint_ids);
 
+        LOG(INFO) << "Num of Keypoints 3: " << current_frame_->GetKeypointsWithStatus({TRACKED_WITH_3D}).size();
+
         if (current_frame_->GetKeypointsWithStatus({TRACKED_WITH_3D}).size() < 10) {
+            LOG(INFO) << "Not enough points to track." << endl;
             exit(0);
         }
 
         // KeyFrame insertion.
         KeyFrameInsertion(im, masks);
+
+        poses.push_back(current_frame_->CameraTransformationWorld());
+        LOG(INFO) << "Num Poses: " << poses.size() << endl;
 
         // Insert frame to the temporal buffer.
         map_->SetLastFrame(current_frame_);
@@ -113,6 +121,10 @@ void Tracking::TrackImage(const cv::Mat &im, const absl::flat_hash_map<std::stri
 
 Tracking::TrackingStatus Tracking::GetTrackingStatus() const {
     return tracking_status_;
+}
+
+std::vector<Sophus::SE3f> Tracking::GetCameraPoses() {
+    return poses;
 }
 
 void Tracking::ExtractFeatures(const cv::Mat& im, const cv::Mat& mask,
@@ -141,6 +153,9 @@ void Tracking::MonocularMapInitialization(const cv::Mat& im_left,
         LOG(INFO) << initialization_status.status().message();
         return;
     }
+
+    poses.push_back(initialization_status->camera_transform_world);
+    LOG(INFO) << "Num Poses: " << poses.size() << endl;
 
     auto initialization_results = *initialization_status;
 
@@ -293,11 +308,148 @@ absl::flat_hash_set<ID> Tracking::TrackCameraAndDeformation(const cv::Mat &im, c
     DataAssociation(im, mask);
 
     // Coarse camera pose estimation.
-    CameraPoseEstimation();
+    CameraPoseEstimation(); 
+
+    bool use_deformation_field = false;
+    // bool use_deformation_field = true;
+    //! Edited 06.03
+    //todo 加入迭代控制：将相机PoseChange和DeformationFieldChange作为收敛条件
+    if(use_deformation_field) {
+        const int max_iters = 5;
+        const float pose_epsilon = 1e-4;
+        const float deformation_epsilon = 1e-3;
+    
+        Sophus::SE3f prev_pose = current_frame_->CameraTransformationWorld();
+        std::vector<Eigen::Vector3f> prev_deformations;
+    
+        absl::flat_hash_set<ID> lost_ids;
+        for (int iter = 0; iter < max_iters; iter ++) {
+            LOG(INFO) << "Iteration: " << iter;
+
+            EstimateDeformationField();
+            
+            ComputeRigidWeights();
+            
+            //todo 修改优化模块接口 
+            lost_ids = CameraPoseAndDeformationEstimation(); 
+            
+            //todo 迭代收敛条件
+            // Sophus::SE3f curr_pose = current_frame_->CameraTransformationWorld();
+            // Sophus::SE3f delta = prev_pose.inverse() * curr_pose;
+            // float pose_change = delta.translation().norm() + delta.so3().log().norm();
+    
+            // float deformation_change = 0.0f;
+            // const auto& curr_deformations = current_frame_->Deformations();
+            // const auto& tracked3d_indices = current_frame_->GetIndexWithStatus({TRACKED_WITH_3D});
+            // for (int idx : tracked3d_indices) {
+            //     deformation_change += (curr_deformations[idx] - prev_deformations[idx]).norm();
+            // }
+            // deformation_change /= static_cast<float>(tracked3d_indices.size());
+    
+            // LOG(INFO) << "Iter " << iter << ": pose_change = " << pose_change 
+            //         << ", deformation_change = " << deformation_change;
+    
+    
+            // // 收敛判断
+            // if (pose_change < pose_epsilon && deformation_change < deformation_epsilon) {
+            //     LOG(INFO) << "Converged at iteration " << iter;
+            //     break;
+            // }
+            // prev_pose = curr_pose;
+        }
+    }
 
     // Deformation + camera pose estimation.
-    auto lost_ids = CameraPoseAndDeformationEstimation();
-    return lost_ids;
+    return CameraPoseAndDeformationEstimationFinal(); 
+}
+
+//! 06.03 start
+void Tracking::EstimateDeformationField() {
+    const Frame& prev_frame = map_->GetLastFrame();
+    const Sophus::SE3f Tcw_prev = prev_frame.CameraTransformationWorld();
+    const Sophus::SE3f Tcw_curr = current_frame_->CameraTransformationWorld();
+
+    Sophus::SE3f Tcoarse = Tcw_curr * Tcw_prev.inverse();  // coarse rigid motion
+
+    current_frame_->MutableDeformations().resize(current_frame_->Keypoints().size(), Eigen::Vector3f::Zero());
+
+    std::vector<int> tracked_indices = current_frame_->GetIndexWithStatus({TRACKED_WITH_3D});
+    for (int idx : tracked_indices) {
+        ID mappoint_id = current_frame_->IndexToMapPointId().at(idx);
+        if (!prev_frame.MapPointIdToIndex().contains(mappoint_id))
+            continue;
+
+        // 正确获取 3D 点的世界坐标（统一来源）
+        Eigen::Vector3f Pw = map_->GetMapPoint(mappoint_id)->GetLastWorldPosition();
+
+        // 在 prev 相机坐标系下的投影
+        Eigen::Vector3f Pc_prev = Tcw_prev.inverse() * Pw;
+
+        // 使用刚性变换预测在 curr 相机坐标下的位置
+        Eigen::Vector3f Pc_rigid = Tcoarse * Pc_prev;
+
+        // 当前帧实际的相机坐标
+        Eigen::Vector3f Pc_curr = Tcw_curr.inverse() * Pw;
+
+        // 非刚性残差
+        Eigen::Vector3f dP = Pc_curr - Pc_rigid;
+
+        // 转到世界坐标系下
+        Eigen::Vector3f dP_world = Tcw_curr.rotationMatrix() * dP;
+
+        current_frame_->MutableDeformations()[idx] = dP_world;
+    }
+}
+
+
+float ComputeMedian(std::vector<float>& data) {
+    if (data.empty()) return 0.0f;
+    std::sort(data.begin(), data.end());
+    size_t n = data.size();
+    if (n % 2 == 0)
+        return (data[n / 2 - 1] + data[n / 2]) / 2.0f;
+    else
+        return data[n / 2];
+}
+
+float ComputeIQR(std::vector<float>& data) {
+    if (data.empty()) return 0.0f;
+    std::sort(data.begin(), data.end());
+    size_t n = data.size();
+    float q1 = data[n / 4];
+    float q3 = data[(3 * n) / 4];
+    return q3 - q1;
+}
+
+void Tracking::ComputeRigidWeights() {
+    std::vector<int> tracked3d_indices = current_frame_->GetIndexWithStatus({TRACKED_WITH_3D});
+
+    std::vector<float> deformation_norms;
+    deformation_norms.reserve(tracked3d_indices.size());
+    for (int idx : tracked3d_indices) {
+        deformation_norms.push_back(current_frame_->Deformations()[idx].norm());
+    }
+
+    float median = ComputeMedian(deformation_norms);
+    float iqr = ComputeIQR(deformation_norms);
+    float T = median + 1.5f * iqr;
+
+    current_frame_->MutableRigidWeights().resize(current_frame_->Keypoints().size(), 1.0f);
+
+    for (int i = 0; i < tracked3d_indices.size(); ++i) {
+        int idx = tracked3d_indices[i];
+        float d_norm = deformation_norms[i];
+
+        float w = 1.0f;
+        if (d_norm > 0)
+            // w = std::max(0.f, 1.0f - d_norm / T); 
+            w = std::exp(-d_norm * d_norm / (2 * T * T));
+
+        w = std::min(0.95f, std::max(0.05f, w));
+        current_frame_->MutableRigidWeights()[idx] = w;
+    }
+
+    LOG(INFO) << "Deformation Field Computed. Median: " << median << ", IQR: " << iqr << ", T: " << T;
 }
 
 void Tracking::DataAssociation(const cv::Mat &im, const cv::Mat &mask) {
@@ -318,10 +470,18 @@ void Tracking::CameraPoseEstimation() {
 
 absl::flat_hash_set<ID> Tracking::CameraPoseAndDeformationEstimation() {
     // Do optimization.
-    auto lost_mappoint_ids = CameraPoseAndDeformationOptimization(*current_frame_,
+    auto lost_mappoint_ids = OptimizeReprojectionOnly(*current_frame_,
                                          map_,previous_camera_transform_world_,
                                          map_->GetMapScale());
 
+    return lost_mappoint_ids;
+}
+
+absl::flat_hash_set<ID> Tracking::CameraPoseAndDeformationEstimationFinal() {
+    // Do optimization.
+    auto lost_mappoint_ids = CameraPoseAndDeformationOptimization(*current_frame_,
+                                         map_,previous_camera_transform_world_,
+                                         map_->GetMapScale());
     // Update motion model.
     motion_model_ = current_frame_->CameraTransformationWorld() *
                     map_->GetLastFrame().CameraTransformationWorld().inverse();

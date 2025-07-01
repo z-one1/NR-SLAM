@@ -26,6 +26,7 @@
 #include "absl/log/check.h"
 #include "absl/log/initialize.h"
 
+
 using namespace std;
 
 ABSL_FLAG(std::string, dataset_path, "", "Path to the video dataset");
@@ -72,6 +73,7 @@ int main(int argc, char **argv) {
 
         SLAM.TrackImageWithDepth((*image), (*depth_image));
     }
+    SLAM.SaveTraj();
 
     return 0;
 }

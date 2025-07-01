@@ -30,6 +30,11 @@ absl::flat_hash_set<ID> CameraPoseAndDeformationOptimization(Frame& current_fram
                                                      std::shared_ptr<Map> map,
                                                      const Sophus::SE3f& previous_camera_transform_world,
                                                      const float scale);
+                                                     
+absl::flat_hash_set<ID> OptimizeReprojectionOnly(Frame& current_frame,
+                                                std::shared_ptr<Map> map,
+                                                const Sophus::SE3f& previous_camera_transform_world,
+                                                const float scale);
 
 absl::StatusOr<Eigen::Vector3f> DeformableTriangulation(TemporalBuffer& temporal_buffer,
                                                         int candidate_id,

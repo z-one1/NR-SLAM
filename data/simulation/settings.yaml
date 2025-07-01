@@ -18,9 +18,9 @@ Visualization.cameraSize: 0.5
 System.autoplay: 1
 
 # Set the below variables to valid paths to save outputs
-MapVisualizer.save_path: ""
-ImageVisualizer.save_path: ""
-Evaluation.save_path: ""
+MapVisualizer.save_path: "outputs/map"
+ImageVisualizer.save_path: "outputs/img"
+Evaluation.save_path: "/home/zy/NR-SLAM/log/eva_rmse.txt"
 
 MapVisualizer.left_view: !!opencv-matrix
   rows: 4

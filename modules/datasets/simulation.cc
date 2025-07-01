@@ -42,7 +42,7 @@ Simulation::Simulation(const std::string &dataset_path) {
     names_file_reader.open(dataset_path + "/rgb.txt");
 
     if(!names_file_reader.is_open()){
-        LOG(FATAL) << "could not open names file at: " << dataset_path + "/names.txt";
+        LOG(FATAL) << "could not open names file at: " << dataset_path + "/rgb.txt";
         return;
     }
 
@@ -51,6 +51,7 @@ Simulation::Simulation(const std::string &dataset_path) {
     while(!names_file_reader.eof()){
         string image_name;
         getline(names_file_reader, image_name);
+        image_name = dataset_path + "/" + image_name;
         images_names_.push_back(image_name);
     }
 
@@ -69,6 +70,7 @@ Simulation::Simulation(const std::string &dataset_path) {
     while(!depth_names_reader.eof()){
         string image_name;
         getline(depth_names_reader, image_name);
+        image_name = dataset_path + "/" + image_name;
         depth_images_names_.push_back(image_name);
     }
 
@@ -119,6 +121,7 @@ absl::StatusOr<cv::Mat> Simulation::GetDepthImage(const int idx) {
         return absl::InternalError("Image index out boundaries.");
     }
 
+    LOG(INFO) << "DepthImage Path: " << depth_images_names_[idx];
     cv::Mat depth_image = cv::imread(depth_images_names_[idx], cv::IMREAD_ANYCOLOR | cv::IMREAD_ANYDEPTH);
 
     cv::Mat channels[3];
@@ -132,9 +135,13 @@ absl::StatusOr<cv::Mat> Simulation::GetDepthImage(const int idx) {
     float w = y / far_clip_;
 
     depth_image = 1.f / (z * (1 - depth_image) + w);
+    double minVal, maxVal;
+    cv::minMaxLoc(depth_image, &minVal, &maxVal);
+    LOG(INFO) << "Decoded depth min/max: " << minVal << " / " << maxVal;
 
     return depth_image;
 }
+
 
 absl::StatusOr<Sophus::SE3f> Simulation::GetCameraPose(const int idx) {
     if (idx >= ground_truth_poses_.size()) {

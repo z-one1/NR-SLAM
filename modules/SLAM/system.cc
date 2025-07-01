@@ -64,7 +64,6 @@ System::System(const string settings_file_path) {
     map_visualizer_options.render_save_path = settings_->GetMapVisualizerPath();
 
     map_visualizer_ = make_unique<MapVisualizer>(map_visualizer_options, map_);
-
     map_visualizer_thread_ = make_unique<thread>(&MapVisualizer::Run, map_visualizer_.get());
 
     //Initialize image visualizer.
@@ -99,7 +98,9 @@ System::System(const string settings_file_path) {
     frame_evaluator_options.results_file_path = settings_->GetEvaluationPath();
     frame_evaluator_options.precomputed_depth_ = true;
     frame_evaluator_ = make_unique<FrameEvaluator>(frame_evaluator_options, stereo_pattern_matcher_,
-                                                   map_visualizer_.get());
+                                                   map_visualizer_.get()); 
+    
+    cout << "Evaluation path: " << settings_->GetEvaluationPath() << endl;
 }
 
 System::~System() {
@@ -108,6 +109,57 @@ System::~System() {
 
     // Wait until is done
     map_visualizer_thread_->join();
+}
+
+
+vector<Eigen::Vector3f> System::GetTraj() {
+    auto latest_frames = map_->GetTemporalBuffer()->GetLatestCameraPoses();
+
+    vector<Eigen::Vector3f> trajectory;
+    for (auto& pose : latest_frames) {
+        trajectory.push_back(pose.inverse().translation());
+    }
+    return trajectory;
+}
+
+
+void System::SaveTraj() {
+    // Get the latest camera poses directly (not just translation)
+    // auto latest_frames = map_->GetTemporalBuffer()->GetLatestCameraPoses();
+    auto poses = tracker_->GetCameraPoses();
+
+    // Open file for writing
+    std::ofstream traj_file("trajectory.tum", std::ios::out);
+    if (!traj_file.is_open()) {
+        std::cerr << "Failed to open trajectory file!" << std::endl;
+        return;
+    }
+
+    // Set precision for floating-point output
+    traj_file << std::fixed << std::setprecision(6);
+
+    // Iterate over poses and write in TUM format
+    double time_step = 0.033; // Assume 30 FPS; adjust as needed
+    int frame_idx = 0;
+    for (const auto& pose : poses) {
+        // Assuming pose is Sophus::SE3f or Sophus::SE3d
+        Eigen::Vector3f t = pose.inverse().translation(); // Translation (x, y, z)
+        Eigen::Quaternionf q(pose.inverse().unit_quaternion()); // Quaternion (qx, qy, qz, qw)
+
+        // Synthetic timestamp (adjust if real timestamps are available)
+        double timestamp = frame_idx * time_step;
+
+        // Write to file: timestamp tx ty tz qx qy qz qw
+        traj_file << timestamp << " "
+                  << t.x() << " " << t.y() << " " << t.z() << " "
+                  << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << "\n";
+
+        frame_idx++;
+    }
+
+    // Close the file
+    traj_file.close();
+    std::cout << "Trajectory saved to trajectory.tum" << std::endl;
 }
 
 void System::TrackImage(const cv::Mat &im) {
@@ -170,11 +222,16 @@ void System::TrackImageWithDepth(const cv::Mat &im_left, const cv::Mat &im_depth
     // Generate image mask.
     auto masks = masker_->GetAllMasks(im_gray_left);
 
+    time_profiler_->Tic("Tracking & Mapping");
+
     // Perform tracking.
     tracker_->TrackImage(im_gray_left, masks, im_gray_right, processed_image_left);
 
     // Perform mapping.
     mapper_->DoMapping();
+
+    time_profiler_->Toc("Tracking & Mapping");
+    time_profiler_->PrintStatisticsForIdentifier("Tracking & Mapping");
 
     // Evaluate reconstruction.
     if (true && tracker_->GetTrackingStatus() == Tracking::TRACKING) {

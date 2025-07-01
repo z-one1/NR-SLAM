@@ -24,6 +24,10 @@
 #include <memory>
 #include <thread>
 
+#include <fstream>
+#include <iomanip>
+#include <Eigen/Geometry>
+
 #include "map/map.h"
 #include "mapping/mapping.h"
 #include "SLAM/settings.h"
@@ -55,6 +59,10 @@ public:
 
     // Tracks the next image using a precomputed depth image.
     void TrackImageWithDepth(const cv::Mat& im_left, const cv::Mat& im_depth);
+
+    vector<Eigen::Vector3f> GetTraj();
+
+    void SaveTraj();
 
 private:
     // Applies preprocessing to the input image (CLAHE, etc).

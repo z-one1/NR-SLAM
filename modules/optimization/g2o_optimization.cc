@@ -47,15 +47,15 @@
 
 using namespace std;
 
-void CameraPoseOptimization(Frame& frame, const Sophus::SE3f& previous_camera_transform_world) {
+void CameraPoseOptimization(Frame &frame, const Sophus::SE3f &previous_camera_transform_world)
+{
     // Create optimizer.
     g2o::SparseOptimizer optimizer;
     std::unique_ptr<g2o::BlockSolver_6_3::LinearSolverType> linearSolver =
-            g2o::make_unique<g2o::LinearSolverDense<g2o::BlockSolver_6_3::PoseMatrixType>>();
+        g2o::make_unique<g2o::LinearSolverDense<g2o::BlockSolver_6_3::PoseMatrixType>>();
 
-    g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(
-            g2o::make_unique<g2o::BlockSolver_6_3>(std::move(linearSolver))
-    );
+    g2o::OptimizationAlgorithmLevenberg *solver = new g2o::OptimizationAlgorithmLevenberg(
+        g2o::make_unique<g2o::BlockSolver_6_3>(std::move(linearSolver)));
 
     optimizer.setAlgorithm(solver);
     optimizer.setVerbose(false);
@@ -64,11 +64,11 @@ void CameraPoseOptimization(Frame& frame, const Sophus::SE3f& previous_camera_tr
     const float th_huber_2dof = sqrt(th_huber_2dof_squared);
 
     // Set camera pose vertex.
-    g2o::VertexSE3Expmap* camera_pose_vertex = new g2o::VertexSE3Expmap();
+    g2o::VertexSE3Expmap *camera_pose_vertex = new g2o::VertexSE3Expmap();
     Sophus::SE3f camera_transform_world = frame.CameraTransformationWorld();
     camera_pose_vertex->setEstimate(g2o::SE3Quat(
-            camera_transform_world.unit_quaternion().cast<double>(),
-            camera_transform_world.translation().cast<double>()));
+        camera_transform_world.unit_quaternion().cast<double>(),
+        camera_transform_world.translation().cast<double>()));
     camera_pose_vertex->setId(0);
 
     optimizer.addVertex(camera_pose_vertex);
@@ -77,19 +77,20 @@ void CameraPoseOptimization(Frame& frame, const Sophus::SE3f& previous_camera_tr
     vector<Eigen::Vector3f> landmark_positions = frame.GetLandmarkPositionsWithStatus({TRACKED_WITH_3D});
     vector<ID> landmark_ids = frame.GetMapPointsIdsWithStatus({TRACKED_WITH_3D});
 
-    vector<ReprojectionErrorOnlyPose*> reprojection_error_edges(keypoints.size(), nullptr);
+    vector<ReprojectionErrorOnlyPose *> reprojection_error_edges(keypoints.size(), nullptr);
 
-    for(int idx = 0; idx < keypoints.size(); idx++){
+    for (int idx = 0; idx < keypoints.size(); idx++)
+    {
         cv::Point2f pixel_coordinates = keypoints[idx].pt;
-        Eigen::Matrix<double,2,1> observation(pixel_coordinates.x, pixel_coordinates.y);
+        Eigen::Matrix<double, 2, 1> observation(pixel_coordinates.x, pixel_coordinates.y);
 
-        ReprojectionErrorOnlyPose* edge = new ReprojectionErrorOnlyPose();
+        ReprojectionErrorOnlyPose *edge = new ReprojectionErrorOnlyPose();
 
-        edge->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(0)));
+        edge->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(0)));
         edge->setMeasurement(observation);
         edge->setInformation(Eigen::Matrix2d::Identity());
 
-        g2o::RobustKernelHuber* robust_kernel = new g2o::RobustKernelHuber;
+        g2o::RobustKernelHuber *robust_kernel = new g2o::RobustKernelHuber;
         edge->setRobustKernel(robust_kernel);
         robust_kernel->setDelta(th_huber_2dof);
 
@@ -103,38 +104,44 @@ void CameraPoseOptimization(Frame& frame, const Sophus::SE3f& previous_camera_tr
     vector<int> iterations = {10, 10, 10};
     vector<bool> inliers(keypoints.size(), true);
 
-    for(int iteration = 0; iteration < iterations.size(); iteration++){
+    for (int iteration = 0; iteration < iterations.size(); iteration++)
+    {
         // Reset position to the initial seed.
         camera_pose_vertex->setEstimate(g2o::SE3Quat(
-                camera_transform_world.unit_quaternion().cast<double>(),
-                camera_transform_world.translation().cast<double>()));
+            camera_transform_world.unit_quaternion().cast<double>(),
+            camera_transform_world.translation().cast<double>()));
 
         optimizer.initializeOptimization(0);
         optimizer.optimize(iterations[iteration]);
 
-        for(int idx = 0; idx < reprojection_error_edges.size(); idx++){
-            ReprojectionErrorOnlyPose* edge = reprojection_error_edges[idx];
-            if(!edge)
+        for (int idx = 0; idx < reprojection_error_edges.size(); idx++)
+        {
+            ReprojectionErrorOnlyPose *edge = reprojection_error_edges[idx];
+            if (!edge)
                 continue;
 
-            if(!inliers[idx]) {
+            if (!inliers[idx])
+            {
                 edge->computeError();
             }
 
             const float chi_squared = edge->chi2();
 
-            if(chi_squared > th_huber_2dof_squared) {
+            if (chi_squared > th_huber_2dof_squared)
+            {
                 inliers[idx] = false;
                 edge->setLevel(1);
             }
-            else {
+            else
+            {
                 inliers[idx] = true;
                 edge->setLevel(0);
             }
 
             // Deactivate robust kernel after 2 iterations as we should have removed
             // all the inlier observations.
-            if(iteration == 2){
+            if (iteration == 2)
+            {
                 edge->setRobustKernel(0);
             }
         }
@@ -142,46 +149,131 @@ void CameraPoseOptimization(Frame& frame, const Sophus::SE3f& previous_camera_tr
 
     // Recover the optimized camera pose.
     frame.MutableCameraTransformationWorld() = Sophus::SE3f(
-            camera_pose_vertex->estimate().to_homogeneous_matrix().cast<float>());
+        camera_pose_vertex->estimate().to_homogeneous_matrix().cast<float>());
 }
 
-absl::flat_hash_set<ID> CameraPoseAndDeformationOptimization(Frame& current_frame,
-                                                     std::shared_ptr<Map> map,
-                                                     const Sophus::SE3f& previous_camera_transform_world,
-                                                     const float scale) {
-    // Create optimizer.
+absl::flat_hash_set<ID> OptimizeReprojectionOnly(Frame &current_frame,
+                                                 std::shared_ptr<Map> map,
+                                                 const Sophus::SE3f &previous_camera_transform_world,
+                                                 const float scale)
+{
     g2o::SparseOptimizer optimizer;
-    std::unique_ptr<g2o::BlockSolverX::LinearSolverType> linearSolver =  g2o::make_unique<g2o::LinearSolverEigen<g2o::BlockSolverX::PoseMatrixType>>();
+    std::unique_ptr<g2o::BlockSolverX::LinearSolverType> linearSolver =
+        g2o::make_unique<g2o::LinearSolverEigen<g2o::BlockSolverX::PoseMatrixType>>();
 
     g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(
-            g2o::make_unique<g2o::BlockSolverX>(std::move(linearSolver))
-    );
+        g2o::make_unique<g2o::BlockSolverX>(std::move(linearSolver)));
+    optimizer.setAlgorithm(solver);
+    optimizer.setVerbose(false);
+
+    // Setup camera pose vertex
+    g2o::VertexSE3Expmap* camera_pose_vertex = new g2o::VertexSE3Expmap();
+    Sophus::SE3f camera_pose = current_frame.CameraTransformationWorld();
+    camera_pose_vertex->setEstimate(g2o::SE3Quat(
+        camera_pose.unit_quaternion().cast<double>(),
+        camera_pose.translation().cast<double>()));
+    camera_pose_vertex->setId(0);
+    camera_pose_vertex->setFixed(false);
+    optimizer.addVertex(camera_pose_vertex);
+
+    const float sigma_reprojection = 0.5; // pixels.
+    const float info_reprojection = 1.0f / (sigma_reprojection * sigma_reprojection);
+
+    // Load input data
+    auto keypoints = current_frame.GetKeypointsWithStatus({TRACKED_WITH_3D});
+    auto landmark_positions = current_frame.GetLandmarkPositionsWithStatus({TRACKED_WITH_3D});
+    auto weights = current_frame.GetRigidWeightsWithStatus({TRACKED_WITH_3D});
+    auto tracked_indices = current_frame.GetIndexWithStatus({TRACKED_WITH_3D});
+
+    std::vector<LandmarkVertex*> deformation_vertices(keypoints.size(), nullptr);
+
+    for (int i = 0; i < keypoints.size(); ++i) {
+        LandmarkVertex* vertex = new LandmarkVertex();
+        vertex->setId(i + 1);
+        vertex->setToOrigin();
+        optimizer.addVertex(vertex);
+        deformation_vertices[i] = vertex;
+    }
+
+    for (int i = 0; i < keypoints.size(); ++i) {
+        auto edge = new ReprojectionErrorWithDeformation();
+
+        const auto& kp = keypoints[i];
+        Eigen::Vector2d obs(kp.pt.x, kp.pt.y);
+        edge->setMeasurement(obs);
+        edge->setVertex(0, camera_pose_vertex);
+        edge->setVertex(1, deformation_vertices[i]);
+
+        edge->calibration_ = current_frame.GetCalibration();
+        edge->landmark_world_ = landmark_positions[i].cast<double>();
+
+        float weight = weights[i];
+        edge->setInformation(Eigen::Matrix2d::Identity() * info_reprojection * weight);
+
+        auto* robust_kernel = new g2o::RobustKernelHuber;
+        robust_kernel->setDelta(2.0);
+        edge->setRobustKernel(robust_kernel);
+
+        optimizer.addEdge(edge);
+    }
+
+    optimizer.initializeOptimization();
+    optimizer.optimize(10);
+
+    // Update results back to frame
+    Sophus::SE3f updated_pose(
+        camera_pose_vertex->estimate().rotation().cast<float>(),
+        camera_pose_vertex->estimate().translation().cast<float>());
+    current_frame.MutableCameraTransformationWorld() = updated_pose;
+
+    for (int i = 0; i < deformation_vertices.size(); ++i) {
+        Eigen::Vector3f deformation = deformation_vertices[i]->estimate().cast<float>();
+        current_frame.MutableDeformations()[tracked_indices[i]] = deformation;
+    }
+
+    return absl::flat_hash_set<ID>();  // no lost mappoints in this stage
+}
+
+absl::flat_hash_set<ID> CameraPoseAndDeformationOptimization(Frame &current_frame,
+                                                             std::shared_ptr<Map> map,
+                                                             const Sophus::SE3f &previous_camera_transform_world,
+                                                             const float scale)
+{
+    // Create optimizer.
+    g2o::SparseOptimizer optimizer;
+    std::unique_ptr<g2o::BlockSolverX::LinearSolverType> linearSolver = g2o::make_unique<g2o::LinearSolverEigen<g2o::BlockSolverX::PoseMatrixType>>();
+
+    g2o::OptimizationAlgorithmLevenberg *solver = new g2o::OptimizationAlgorithmLevenberg(
+        g2o::make_unique<g2o::BlockSolverX>(std::move(linearSolver)));
 
     optimizer.setAlgorithm(solver);
     optimizer.setVerbose(false);
 
     // Set camera vertex
-    g2o::VertexSE3Expmap* camera_pose_vertex = new g2o::VertexSE3Expmap();
+    g2o::VertexSE3Expmap *camera_pose_vertex = new g2o::VertexSE3Expmap();
     Sophus::SE3f camera_transform_world = current_frame.CameraTransformationWorld();
     camera_pose_vertex->setEstimate(g2o::SE3Quat(
-            camera_transform_world.unit_quaternion().cast<double>(),
-            camera_transform_world.translation().cast<double>()));
+        camera_transform_world.unit_quaternion().cast<double>(),
+        camera_transform_world.translation().cast<double>()));
     camera_pose_vertex->setId(0);
     camera_pose_vertex->setFixed(false);
 
     optimizer.addVertex(camera_pose_vertex);
 
-    vector<cv::KeyPoint> keypoints = current_frame.GetKeypointsWithStatus({TRACKED_WITH_3D});
-    vector<Eigen::Vector3f> landmark_positions = current_frame.GetLandmarkPositionsWithStatus({TRACKED_WITH_3D});
-    vector<ID> mappoints_ids = current_frame.GetMapPointsIdsWithStatus({TRACKED_WITH_3D});
+    auto keypoints = current_frame.GetKeypointsWithStatus({TRACKED_WITH_3D});
+    auto landmark_positions = current_frame.GetLandmarkPositionsWithStatus({TRACKED_WITH_3D});
+    auto weights = current_frame.GetRigidWeightsWithStatus({TRACKED_WITH_3D});
+    auto mappoints_ids = current_frame.GetMapPointsIdsWithStatus({TRACKED_WITH_3D});
     absl::flat_hash_map<ID, int> mappoint_id_to_index;
+
     const int points_in_optimization = keypoints.size();
 
     auto regularization_graph = map->GetRegularizationGraph();
 
     // Set point vertices.
-    vector<LandmarkVertex*> deformation_vertices(points_in_optimization, nullptr);
-    for (int idx = 0; idx < points_in_optimization; idx++) {
+    vector<LandmarkVertex *> deformation_vertices(points_in_optimization, nullptr);
+    for (int idx = 0; idx < points_in_optimization; idx++)
+    {
         deformation_vertices[idx] = new LandmarkVertex();
         deformation_vertices[idx]->setId(idx + 1);
         deformation_vertices[idx]->setToOrigin();
@@ -200,18 +292,18 @@ absl::flat_hash_set<ID> CameraPoseAndDeformationOptimization(Frame& current_fram
     const float th_huber_3dof_squared = 0.584;
     const float th_huber_3dof = sqrt(th_huber_3dof_squared);
 
-    const float sigma_reprojection = 0.5;   // pixels.
+    const float sigma_reprojection = 0.5; // pixels.
     const float info_reprojection = 1.0f / (sigma_reprojection * sigma_reprojection);
 
     float sigma_position = 0.1f;
     float info_position = 1.0f / (sigma_position * sigma_position);
 
-    const float sigma_spatial = 0.1 * scale;   // mm.
+    const float sigma_spatial = 0.1 * scale; // mm.
     const float info_spatial = 1.0f / (sigma_spatial * sigma_spatial);
 
-    vector<absl::flat_hash_map<int, SpatialRegularizerWithDeformation*>> spatial_regularizers(points_in_optimization);
-    vector<absl::flat_hash_map<int, PositionRegularizerWithDeformation*>> position_regularizers(points_in_optimization);
-    vector<ReprojectionErrorWithDeformation*> reprojection_errors(points_in_optimization);
+    vector<absl::flat_hash_map<int, SpatialRegularizerWithDeformation *>> spatial_regularizers(points_in_optimization);
+    vector<absl::flat_hash_map<int, PositionRegularizerWithDeformation *>> position_regularizers(points_in_optimization);
+    vector<ReprojectionErrorWithDeformation *> reprojection_errors(points_in_optimization);
 
     int n_reprojection_edges = 0;
     int n_spatial_edges = 0;
@@ -221,21 +313,22 @@ absl::flat_hash_set<ID> CameraPoseAndDeformationOptimization(Frame& current_fram
 
     absl::btree_set<ID> lost_mappoint_ids_ordered;
     absl::flat_hash_set<ID> lost_mappoint_ids;
-    for (int idx = 0; idx < points_in_optimization; idx++) {
+    for (int idx = 0; idx < points_in_optimization; idx++)
+    {
         // Set reprojection error.
-        ReprojectionErrorWithDeformation* reprojection_error = new ReprojectionErrorWithDeformation();
+        ReprojectionErrorWithDeformation *reprojection_error = new ReprojectionErrorWithDeformation();
 
         cv::Point2f pixel_coordinates = keypoints[idx].pt;
-        Eigen::Matrix<double,2,1> observation(pixel_coordinates.x, pixel_coordinates.y);
+        Eigen::Matrix<double, 2, 1> observation(pixel_coordinates.x, pixel_coordinates.y);
 
         reprojection_error->setMeasurement(observation);
 
-        reprojection_error->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(0)));
-        reprojection_error->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idx+1)));
+        reprojection_error->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(0)));
+        reprojection_error->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(idx + 1)));
 
-        reprojection_error->setInformation(Eigen::Matrix2d::Identity() * info_reprojection);
+        reprojection_error->setInformation(Eigen::Matrix2d::Identity() * info_reprojection * weights[idx]);
 
-        g2o::RobustKernelHuber* robust_kernel = new g2o::RobustKernelHuber;
+        g2o::RobustKernelHuber *robust_kernel = new g2o::RobustKernelHuber;
         robust_kernel->setDelta(th_huber_2dof);
         reprojection_error->setRobustKernel(robust_kernel);
 
@@ -250,21 +343,25 @@ absl::flat_hash_set<ID> CameraPoseAndDeformationOptimization(Frame& current_fram
         // Set spatial regularizers.
         const ID mappoint_id = mappoints_ids[idx];
         auto regularization_edges =
-                regularization_graph->GetEdges(mappoint_id);
+            regularization_graph->GetEdges(mappoint_id);
 
         int n_regularizers = 0;
-        for(const auto& [mappoint_id_other, regularization_edge] : regularization_edges) {
+        for (const auto &[mappoint_id_other, regularization_edge] : regularization_edges)
+        {
             // Check if there is already enough regularizers or if the connection is good.
             if (n_regularizers > regularizers_per_point ||
-                regularization_edge->status == RegularizationGraph::BAD) {
+                regularization_edge->status == RegularizationGraph::BAD)
+            {
                 break;
             }
 
             // Check that the connected point is also being optimized.
             if (!current_frame.MapPointIdToIndex().contains(mappoint_id_other) ||
-                current_frame.LandmarkStatuses()[current_frame.MapPointIdToIndex().at(mappoint_id_other)] != TRACKED_WITH_3D) {
+                current_frame.LandmarkStatuses()[current_frame.MapPointIdToIndex().at(mappoint_id_other)] != TRACKED_WITH_3D)
+            {
                 if (current_frame.MapPointIdToIndex().contains(mappoint_id_other) &&
-                    current_frame.LandmarkStatuses()[current_frame.MapPointIdToIndex().at(mappoint_id_other)] != JUST_TRIANGULATED) {
+                    current_frame.LandmarkStatuses()[current_frame.MapPointIdToIndex().at(mappoint_id_other)] != JUST_TRIANGULATED)
+                {
                     lost_mappoint_ids.insert(mappoint_id_other);
                     lost_mappoint_ids_ordered.insert(mappoint_id_other);
                 }
@@ -274,21 +371,22 @@ absl::flat_hash_set<ID> CameraPoseAndDeformationOptimization(Frame& current_fram
 
             // Check if this regularizer has already been inserted in the optimization.
             const int idx_other = mappoint_id_to_index[mappoint_id_other];
-            if (spatial_regularizers[idx].contains(idx_other)) {
+            if (spatial_regularizers[idx].contains(idx_other))
+            {
                 continue;
             }
 
             // Set spatial regularizer.
             auto spatial_regularizer = new SpatialRegularizerWithDeformation();
-            spatial_regularizer->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(
-                    optimizer.vertex(idx + 1)));
-            spatial_regularizer->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(
-                    optimizer.vertex(idx_other + 1)));
+            spatial_regularizer->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(
+                                                  optimizer.vertex(idx + 1)));
+            spatial_regularizer->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex *>(
+                                                  optimizer.vertex(idx_other + 1)));
 
             Eigen::Matrix3d spatial_information_matrix = Eigen::Matrix3d::Identity() * info_spatial;
             spatial_regularizer->setInformation(spatial_information_matrix);
 
-            g2o::RobustKernelHuber* robust_kernel = new g2o::RobustKernelHuber;
+            g2o::RobustKernelHuber *robust_kernel = new g2o::RobustKernelHuber;
             robust_kernel->setDelta(th_huber_3dof);
             spatial_regularizer->setRobustKernel(robust_kernel);
 
@@ -306,22 +404,22 @@ absl::flat_hash_set<ID> CameraPoseAndDeformationOptimization(Frame& current_fram
             n_regularizers++;
 
             // Set position regularizer.
-            PositionRegularizerWithDeformation* position_regularizer = new PositionRegularizerWithDeformation();
-            position_regularizer->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(
-                    optimizer.vertex(idx + 1)));
-            position_regularizer->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(
-                    optimizer.vertex(idx_other + 1)));
+            PositionRegularizerWithDeformation *position_regularizer = new PositionRegularizerWithDeformation();
+            position_regularizer->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(
+                                                   optimizer.vertex(idx + 1)));
+            position_regularizer->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex *>(
+                                                   optimizer.vertex(idx_other + 1)));
 
             position_regularizer->setMeasurement(regularization_edge->first_distance);
 
             Eigen::Matrix<double, 1, 1> position_information_matrix =
-                    Eigen::Matrix<double, 1, 1>::Identity() * info_position;
+                Eigen::Matrix<double, 1, 1>::Identity() * info_position;
             position_regularizer->setInformation(position_information_matrix);
 
             position_regularizer->rest_position_1_ = landmark_positions[idx].cast<double>();
             position_regularizer->rest_position_2_ = landmark_positions[idx_other].cast<double>();
 
-            g2o::RobustKernelHuber* robust_kernel_position = new g2o::RobustKernelHuber;
+            g2o::RobustKernelHuber *robust_kernel_position = new g2o::RobustKernelHuber;
             robust_kernel_position->setDelta(th_huber_3dof);
             position_regularizer->setRobustKernel(robust_kernel_position);
 
@@ -338,18 +436,23 @@ absl::flat_hash_set<ID> CameraPoseAndDeformationOptimization(Frame& current_fram
     vector<int> iterations = {10, 10};
     vector<bool> inliers(points_in_optimization, true);
 
-    for (int iteration = 0; iteration < iterations.size(); iteration++){
+    for (int iteration = 0; iteration < iterations.size(); iteration++)
+    {
         int n_good_regularizers = 0;
 
         // Reset estimations.
         camera_pose_vertex->setEstimate(g2o::SE3Quat(
-                camera_transform_world.unit_quaternion().cast<double>(),
-                camera_transform_world.translation().cast<double>()));
+            camera_transform_world.unit_quaternion().cast<double>(),
+            camera_transform_world.translation().cast<double>()));
 
-        for(auto vertex : deformation_vertices){
-            if(!vertex) {
+        for (auto vertex : deformation_vertices)
+        {
+            if (!vertex)
+            {
                 continue;
-            } else{
+            }
+            else
+            {
                 vertex->setToOrigin();
             }
         }
@@ -358,36 +461,46 @@ absl::flat_hash_set<ID> CameraPoseAndDeformationOptimization(Frame& current_fram
         optimizer.optimize(iterations[iteration]);
 
         // Check reprojection errors.
-        for(int idx = 0; idx < points_in_optimization; idx++){
-            ReprojectionErrorWithDeformation* reprojection_error = reprojection_errors[idx];
+        for (int idx = 0; idx < points_in_optimization; idx++)
+        {
+            ReprojectionErrorWithDeformation *reprojection_error = reprojection_errors[idx];
 
             reprojection_error->computeError();
 
             const float chi_squared = reprojection_error->chi2();
 
-            if(chi_squared > th_huber_2dof_squared) {
+            if (chi_squared > th_huber_2dof_squared)
+            {
                 inliers[idx] = false;
 
                 reprojection_error->setLevel(1);
-                for (auto& [idx_other, spatial_regularizer] : spatial_regularizers[idx]) {
+                for (auto &[idx_other, spatial_regularizer] : spatial_regularizers[idx])
+                {
                     spatial_regularizer->setLevel(1);
                 }
-            } else {
+            }
+            else
+            {
                 inliers[idx] = true;
 
                 reprojection_error->setLevel(0);
-                for (auto& [idx_other, spatial_regularizer] : spatial_regularizers[idx]) {
+                for (auto &[idx_other, spatial_regularizer] : spatial_regularizers[idx])
+                {
                     spatial_regularizer->setLevel(0);
                 }
             }
 
             // Check spatial regularizers.
-            for (auto& [idx_other, spatial_regularizer] : spatial_regularizers[idx]) {
+            for (auto &[idx_other, spatial_regularizer] : spatial_regularizers[idx])
+            {
                 spatial_regularizer->computeError();
 
-                if(spatial_regularizer->chi2() > th_huber_3dof_squared) {
+                if (spatial_regularizer->chi2() > th_huber_3dof_squared)
+                {
                     spatial_regularizer->setLevel(1);
-                } else {
+                }
+                else
+                {
                     spatial_regularizer->setLevel(0);
                 }
             }
@@ -396,11 +509,12 @@ absl::flat_hash_set<ID> CameraPoseAndDeformationOptimization(Frame& current_fram
 
     // Recover the optimized camera pose.
     current_frame.MutableCameraTransformationWorld() = Sophus::SE3f(
-            camera_pose_vertex->estimate().to_homogeneous_matrix().cast<float>());
+        camera_pose_vertex->estimate().to_homogeneous_matrix().cast<float>());
 
     vector<float> deformation_magnitudes;
-    for(int idx = 0; idx < points_in_optimization; idx++) {
-        LandmarkVertex* deformation_vertex = static_cast<LandmarkVertex*>(optimizer.vertex(idx+1));
+    for (int idx = 0; idx < points_in_optimization; idx++)
+    {
+        LandmarkVertex *deformation_vertex = static_cast<LandmarkVertex *>(optimizer.vertex(idx + 1));
         Eigen::Vector3f deformation = deformation_vertex->estimate().cast<float>();
         deformation_magnitudes.push_back(deformation.norm());
     }
@@ -408,30 +522,33 @@ absl::flat_hash_set<ID> CameraPoseAndDeformationOptimization(Frame& current_fram
     vector<float> sorted_deformation_magnitudes = deformation_magnitudes;
     sort(sorted_deformation_magnitudes.begin(), sorted_deformation_magnitudes.end());
     float interquartileRange = sorted_deformation_magnitudes[(int)(sorted_deformation_magnitudes.size() * 0.75f)] -
-            sorted_deformation_magnitudes[(int)(sorted_deformation_magnitudes.size() * 0.25f)];
+                               sorted_deformation_magnitudes[(int)(sorted_deformation_magnitudes.size() * 0.25f)];
     float q1 = sorted_deformation_magnitudes[(int)(sorted_deformation_magnitudes.size() * 0.25f)];
     float q3 = sorted_deformation_magnitudes[(int)(sorted_deformation_magnitudes.size() * 0.75f)];
 
     float th_ = 1.5f * interquartileRange;
 
     // Update point positions.
-    for(int idx = 0; idx < points_in_optimization; idx++) {
-        ReprojectionErrorWithDeformation* reprojection_error = reprojection_errors[idx];
+    for (int idx = 0; idx < points_in_optimization; idx++)
+    {
+        ReprojectionErrorWithDeformation *reprojection_error = reprojection_errors[idx];
         reprojection_error->computeError();
 
         int index_in_frame = current_frame.MapPointIdToIndex().at(mappoints_ids[idx]);
 
         const float chi_squared = reprojection_error->chi2();
-        if(chi_squared > th_huber_2dof_squared) {
+        if (chi_squared > th_huber_2dof_squared)
+        {
             inliers[idx] = false;
 
             current_frame.LandmarkStatuses()[index_in_frame] = TRACKED;
         }
 
-        LandmarkVertex* deformation_vertex = static_cast<LandmarkVertex*>(optimizer.vertex(idx+1));
+        LandmarkVertex *deformation_vertex = static_cast<LandmarkVertex *>(optimizer.vertex(idx + 1));
         Eigen::Vector3f deformation = deformation_vertex->estimate().cast<float>();
 
-        if (deformation.norm() >= q3 + th_) {
+        if (deformation.norm() >= q3 + th_)
+        {
             current_frame.LandmarkStatuses()[index_in_frame] = TRACKED;
             continue;
         }
@@ -455,8 +572,10 @@ absl::flat_hash_set<ID> CameraPoseAndDeformationOptimization(Frame& current_fram
     current_frame.SetDeformationMaginitud(deformation_magnitudes[median_idx]);
 
     // Update regularization graph.
-    for(int idx = 0; idx < points_in_optimization; idx++) {
-        if (!inliers[idx]) {
+    for (int idx = 0; idx < points_in_optimization; idx++)
+    {
+        if (!inliers[idx])
+        {
             continue;
         }
 
@@ -467,21 +586,24 @@ absl::flat_hash_set<ID> CameraPoseAndDeformationOptimization(Frame& current_fram
 
         int good_connections = regularization_graph->UpdateVertex(mappoint_id);
 
-        if (good_connections < regularizers_per_point * 0.5) {
+        if (good_connections < regularizers_per_point * 0.5)
+        {
             LOG(INFO) << "Removing features because graph error: ";
             current_frame.LandmarkStatuses()[index_in_frame] = BAD;
         }
     }
 
-    if (lost_mappoint_ids.empty()) {
+    if (lost_mappoint_ids.empty())
+    {
         return lost_mappoint_ids;
     }
 
     int current_id = points_in_optimization + 2;
     absl::flat_hash_map<ID, int> lost_mappoint_id_to_index;
 
-    for (ID lost_mappoint_id : lost_mappoint_ids_ordered) {
-        LandmarkVertex* deformation_vertex = new LandmarkVertex();
+    for (ID lost_mappoint_id : lost_mappoint_ids_ordered)
+    {
+        LandmarkVertex *deformation_vertex = new LandmarkVertex();
         deformation_vertex->setId(current_id);
         deformation_vertex->setToOrigin();
 
@@ -493,15 +615,18 @@ absl::flat_hash_set<ID> CameraPoseAndDeformationOptimization(Frame& current_fram
 
         // Add regularization edges.
         auto regularization_edges =
-                regularization_graph->GetEdges(lost_mappoint_id);
+            regularization_graph->GetEdges(lost_mappoint_id);
 
         int n_regularizers = 0;
-        for(const auto& [mappoint_id_other, regularization_edge] : regularization_edges) {
-            if (n_regularizers > 10) {
+        for (const auto &[mappoint_id_other, regularization_edge] : regularization_edges)
+        {
+            if (n_regularizers > 10)
+            {
                 break;
             }
 
-            if (!mappoint_id_to_index.contains(mappoint_id_other)) {
+            if (!mappoint_id_to_index.contains(mappoint_id_other))
+            {
                 continue;
             }
 
@@ -509,9 +634,9 @@ absl::flat_hash_set<ID> CameraPoseAndDeformationOptimization(Frame& current_fram
 
             float weight = regularization_edge->weight;
 
-            SpatialRegularizerFixed* spatial_regularizer = new SpatialRegularizerFixed();
-            spatial_regularizer->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(
-                    optimizer.vertex(current_id - 1)));
+            SpatialRegularizerFixed *spatial_regularizer = new SpatialRegularizerFixed();
+            spatial_regularizer->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(
+                                                  optimizer.vertex(current_id - 1)));
 
             Eigen::Matrix3d spatial_information_matrix = Eigen::Matrix3d::Identity() * info_spatial;
             spatial_regularizer->setInformation(spatial_information_matrix);
@@ -520,7 +645,7 @@ absl::flat_hash_set<ID> CameraPoseAndDeformationOptimization(Frame& current_fram
             spatial_regularizer->id1 = lost_mappoint_id;
             spatial_regularizer->id2 = mappoint_id_other;
 
-            g2o::RobustKernelHuber* robust_kernel = new g2o::RobustKernelHuber;
+            g2o::RobustKernelHuber *robust_kernel = new g2o::RobustKernelHuber;
             robust_kernel->setDelta(th_huber_3dof);
             spatial_regularizer->setRobustKernel(robust_kernel);
 
@@ -538,10 +663,11 @@ absl::flat_hash_set<ID> CameraPoseAndDeformationOptimization(Frame& current_fram
     optimizer.optimize(10);
 
     lost_mappoint_ids.clear();
-    for (const auto& [mappoint_id, idx] : lost_mappoint_id_to_index) {
+    for (const auto &[mappoint_id, idx] : lost_mappoint_id_to_index)
+    {
         auto mappoint = map->GetMapPoint(mappoint_id);
 
-        LandmarkVertex* deformation_vertex = static_cast<LandmarkVertex*>(optimizer.vertex(idx));
+        LandmarkVertex *deformation_vertex = static_cast<LandmarkVertex *>(optimizer.vertex(idx));
         Eigen::Vector3f deformation = deformation_vertex->estimate().cast<float>();
 
         Eigen::Vector3f previous_landmark_position = mappoint->GetLastWorldPosition();
@@ -553,20 +679,21 @@ absl::flat_hash_set<ID> CameraPoseAndDeformationOptimization(Frame& current_fram
     }
 
     return lost_mappoint_ids;
-
 }
 
-absl::StatusOr<Eigen::Vector3f> DeformableTriangulation(TemporalBuffer& temporal_buffer,
+absl::StatusOr<Eigen::Vector3f> DeformableTriangulation(TemporalBuffer &temporal_buffer,
                                                         int candidate_id,
                                                         std::shared_ptr<CameraModel> calibration,
-                                                        const float scale) {
+                                                        const float scale)
+{
     // Recover feature track.
     auto candidate_track = temporal_buffer.GetFeatureTrack(candidate_id);
 
     // Get candidate neighbors.
     auto neighbour_ids = temporal_buffer.GetClosestMapPointsToFeature(candidate_id, 10, 20, 500);
 
-    if (neighbour_ids.empty()) {
+    if (neighbour_ids.empty())
+    {
         return absl::InternalError("Feature too close to other ones.");
     }
 
@@ -575,30 +702,29 @@ absl::StatusOr<Eigen::Vector3f> DeformableTriangulation(TemporalBuffer& temporal
 
     // Create optimizer.
     g2o::SparseOptimizer optimizer;
-    std::unique_ptr<g2o::BlockSolverX::LinearSolverType> linearSolver =  g2o::make_unique<g2o::LinearSolverEigen<g2o::BlockSolverX::PoseMatrixType>>();
+    std::unique_ptr<g2o::BlockSolverX::LinearSolverType> linearSolver = g2o::make_unique<g2o::LinearSolverEigen<g2o::BlockSolverX::PoseMatrixType>>();
 
-    g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(
-            g2o::make_unique<g2o::BlockSolverX>(std::move(linearSolver))
-    );
+    g2o::OptimizationAlgorithmLevenberg *solver = new g2o::OptimizationAlgorithmLevenberg(
+        g2o::make_unique<g2o::BlockSolverX>(std::move(linearSolver)));
 
     optimizer.setAlgorithm(solver);
 
-    const float sigma_reprojection = 0.5;   // pixels.
+    const float sigma_reprojection = 0.5; // pixels.
     const float info_reprojection = 1.0f / (sigma_reprojection * sigma_reprojection);
 
     // Set up vertices.
-    absl::flat_hash_map<int, LandmarkVertex*> landmark_vertices;
+    absl::flat_hash_map<int, LandmarkVertex *> landmark_vertices;
     absl::flat_hash_map<int, Eigen::Vector3d> landmark_seeds;
-    absl::flat_hash_map<int, ReprojectionErrorOnlyDeformation*> frame_id_to_reprojection_edge;
+    absl::flat_hash_map<int, ReprojectionErrorOnlyDeformation *> frame_id_to_reprojection_edge;
 
-    const auto& [current_frame_id, current_keypoint] = candidate_track.front();
-    const auto& [previous_frame_id, previous_keypoint] = candidate_track.back();
+    const auto &[current_frame_id, current_keypoint] = candidate_track.front();
+    const auto &[previous_frame_id, previous_keypoint] = candidate_track.back();
 
     // Unproject rays.
     Eigen::Vector3f current_ray =
-            calibration->Unproject(current_keypoint.pt.x, current_keypoint.pt.y).normalized();
+        calibration->Unproject(current_keypoint.pt.x, current_keypoint.pt.y).normalized();
     Eigen::Vector3f previous_ray =
-            calibration->Unproject(previous_keypoint.pt.x, previous_keypoint.pt.y).normalized();
+        calibration->Unproject(previous_keypoint.pt.x, previous_keypoint.pt.y).normalized();
 
     // Get camera poses.
     auto current_camera_transform_world = temporal_buffer.GetCameraTransformWorld(current_frame_id);
@@ -606,24 +732,27 @@ absl::StatusOr<Eigen::Vector3f> DeformableTriangulation(TemporalBuffer& temporal
 
     // Rigid triangulation.
     auto landmark_position_status =
-            TriangulateMidPoint(previous_ray, current_ray,
-                                *previous_camera_transform_world, *current_camera_transform_world);
+        TriangulateMidPoint(previous_ray, current_ray,
+                            *previous_camera_transform_world, *current_camera_transform_world);
 
-    if (!landmark_position_status.ok()) {
+    if (!landmark_position_status.ok())
+    {
         return absl::InternalError(landmark_position_status.status().message());
     }
 
     Eigen::Vector3f landmark_current_position = (*current_camera_transform_world) * (*landmark_position_status);
     cv::Point2f projected_landmark_1 = calibration->Project(landmark_current_position);
 
-    if(SquaredReprojectionError(current_keypoint.pt, projected_landmark_1) > 5.991){
+    if (SquaredReprojectionError(current_keypoint.pt, projected_landmark_1) > 5.991)
+    {
         return absl::InternalError("High reprojection error at first camera.");
     }
 
     Eigen::Vector3f landmark_previous_position = (*previous_camera_transform_world) * (*landmark_position_status);
     cv::Point2f projected_landmark_2 = calibration->Project(landmark_previous_position);
 
-    if(SquaredReprojectionError(previous_keypoint.pt, projected_landmark_2) > 5.991){
+    if (SquaredReprojectionError(previous_keypoint.pt, projected_landmark_2) > 5.991)
+    {
         return absl::InternalError("High reprojection error at second camera.");
     }
 
@@ -631,40 +760,46 @@ absl::StatusOr<Eigen::Vector3f> DeformableTriangulation(TemporalBuffer& temporal
     Eigen::Vector3f normal_2 = (*landmark_position_status) - (*previous_camera_transform_world).inverse().translation();
     float parallax = RaysParallax(normal_1, normal_2);
 
-    if(parallax < 0.0025 * 5.f){
+    if (parallax < 0.0025 * 5.f)
+    {
         return absl::InternalError("Low parallax.");
     }
 
-    for (const auto& [frame_id, keypoint] : candidate_track) {
+    for (const auto &[frame_id, keypoint] : candidate_track)
+    {
         auto camera_transform_world = temporal_buffer.GetCameraTransformWorld(frame_id);
         CHECK_OK(camera_transform_world);
 
         float depth_seed = 0.0f;
         int n_neighbors = 0;
-        for (const auto neighbor_id : neighbour_ids) {
+        for (const auto neighbor_id : neighbour_ids)
+        {
             auto landmark_position = temporal_buffer.GetLandmarkPosition(frame_id, neighbor_id);
 
-            if(landmark_position.ok()) {
+            if (landmark_position.ok())
+            {
                 depth_seed += ((*camera_transform_world) * (*landmark_position)).z();
 
                 n_neighbors++;
             }
         }
 
-        if (n_neighbors == 0) {
+        if (n_neighbors == 0)
+        {
             return absl::InternalError("Found no neighbours in a temporal point.");
         }
 
-        depth_seed /= (float) n_neighbors;
+        depth_seed /= (float)n_neighbors;
 
-        if (depth_seed < 0) {
+        if (depth_seed < 0)
+        {
             return absl::InternalError("Negative initial depth.");
         }
 
         Eigen::Vector3d landmark_position_seed = (calibration->Unproject(keypoint.pt) * depth_seed)
-                .cast<double>();
+                                                     .cast<double>();
 
-        LandmarkVertex* landmark_vertex = new LandmarkVertex();
+        LandmarkVertex *landmark_vertex = new LandmarkVertex();
         landmark_vertex->setId(frame_id);
         landmark_vertex->setEstimate(landmark_position_seed);
 
@@ -673,11 +808,11 @@ absl::StatusOr<Eigen::Vector3f> DeformableTriangulation(TemporalBuffer& temporal
         landmark_seeds[frame_id] = landmark_position_seed;
 
         // Set reprojection error.
-        ReprojectionErrorOnlyDeformation* reprojection_error =
-                new ReprojectionErrorOnlyDeformation();
+        ReprojectionErrorOnlyDeformation *reprojection_error =
+            new ReprojectionErrorOnlyDeformation();
 
         cv::Point2f pixel_coordinates = keypoint.pt;
-        Eigen::Matrix<double,2,1> observation(pixel_coordinates.x, pixel_coordinates.y);
+        Eigen::Matrix<double, 2, 1> observation(pixel_coordinates.x, pixel_coordinates.y);
         reprojection_error->setMeasurement(observation);
 
         reprojection_error->setVertex(0, optimizer.vertex(frame_id));
@@ -698,47 +833,51 @@ absl::StatusOr<Eigen::Vector3f> DeformableTriangulation(TemporalBuffer& temporal
     const float sigma_spatial = 0.1;
     const float info_spatial = 1.0f / (sigma_spatial * sigma_spatial);
 
-    vector<SpatialRegularizerWithObservation*> regularization_terms;
+    vector<SpatialRegularizerWithObservation *> regularization_terms;
     for (auto current_iterator = candidate_track.begin();
-         current_iterator != candidate_track.end(); current_iterator++) {
+         current_iterator != candidate_track.end(); current_iterator++)
+    {
         int current_frame_id = current_iterator->first;
 
         auto current_camera_transform_world = temporal_buffer.GetCameraTransformWorld(current_frame_id);
         CHECK_OK(current_camera_transform_world);
 
         g2o::SE3Quat current_pose_g2o = g2o::SE3Quat(
-                (*current_camera_transform_world).inverse().unit_quaternion().cast<double>(),
-                (*current_camera_transform_world).inverse().translation().cast<double>());
+            (*current_camera_transform_world).inverse().unit_quaternion().cast<double>(),
+            (*current_camera_transform_world).inverse().translation().cast<double>());
 
         for (auto next_iterator = next(current_iterator);
-             next_iterator != candidate_track.end(); next_iterator++) {
+             next_iterator != candidate_track.end(); next_iterator++)
+        {
             int next_frame_id = next_iterator->first;
 
             auto next_camera_transform_world = temporal_buffer.GetCameraTransformWorld(next_frame_id);
             CHECK_OK(next_camera_transform_world);
 
             g2o::SE3Quat next_pose_g2o = g2o::SE3Quat(
-                    (*next_camera_transform_world).inverse().unit_quaternion().cast<double>(),
-                    (*next_camera_transform_world).inverse().translation().cast<double>());
+                (*next_camera_transform_world).inverse().unit_quaternion().cast<double>(),
+                (*next_camera_transform_world).inverse().translation().cast<double>());
 
-            for (auto neighbor_id : neighbour_ids) {
+            for (auto neighbor_id : neighbour_ids)
+            {
                 auto current_landmark_position = temporal_buffer.GetLandmarkPosition(current_frame_id,
                                                                                      neighbor_id);
                 auto next_landmark_position = temporal_buffer.GetLandmarkPosition(next_frame_id,
                                                                                   neighbor_id);
 
                 auto first_landmark_position = temporal_buffer.GetLandmarkPosition(first_frame_id,
-                                                                                  neighbor_id);
+                                                                                   neighbor_id);
 
                 if (!current_landmark_position.ok() || !next_landmark_position.ok() ||
-                    !first_landmark_position.ok()) {
+                    !first_landmark_position.ok())
+                {
                     continue;
                 }
 
                 Eigen::Vector3f flow = (*next_landmark_position) - (*current_landmark_position);
 
-                SpatialRegularizerWithObservation* spatial_regularizer =
-                        new SpatialRegularizerWithObservation();
+                SpatialRegularizerWithObservation *spatial_regularizer =
+                    new SpatialRegularizerWithObservation();
 
                 spatial_regularizer->setMeasurement(flow.cast<double>());
 
@@ -760,7 +899,8 @@ absl::StatusOr<Eigen::Vector3f> DeformableTriangulation(TemporalBuffer& temporal
         }
     }
 
-    if(optimizer.edges().size() == 0 || optimizer.vertices().size() == 0) {
+    if (optimizer.edges().size() == 0 || optimizer.vertices().size() == 0)
+    {
         return absl::InternalError("Optimization is empty.");
     }
 
@@ -770,31 +910,37 @@ absl::StatusOr<Eigen::Vector3f> DeformableTriangulation(TemporalBuffer& temporal
 
     // Remove outlier regularization terms.
     int bad_edges = 0;
-    for (auto regularization_edge : regularization_terms) {
+    for (auto regularization_edge : regularization_terms)
+    {
         regularization_edge->computeError();
 
         regularization_edge->setRobustKernel(nullptr);
 
-        if (regularization_edge->chi2() > th_huber_3dof_squared) {
+        if (regularization_edge->chi2() > th_huber_3dof_squared)
+        {
             regularization_edge->setLevel(1);
             bad_edges++;
         }
     }
 
-    if ((float)bad_edges / (float)regularization_terms.size() > 0.5) {
+    if ((float)bad_edges / (float)regularization_terms.size() > 0.5)
+    {
         return absl::InternalError("Triangulation has to many bad neighbors.");
     }
 
     int n_bad_edges = 0;
 
-    for (const auto [id, reprojection_edge] : frame_id_to_reprojection_edge) {
+    for (const auto [id, reprojection_edge] : frame_id_to_reprojection_edge)
+    {
         reprojection_edge->computeError();
-        if (reprojection_edge->chi2() > 5.99 * 10) {
+        if (reprojection_edge->chi2() > 5.99 * 10)
+        {
             n_bad_edges++;
         }
     }
 
-    if ((float) n_bad_edges / (float) optimizer.vertices().size() > 0.5) {
+    if ((float)n_bad_edges / (float)optimizer.vertices().size() > 0.5)
+    {
         return absl::InternalError("Triangulation has to much error.");
     }
 
@@ -808,30 +954,33 @@ absl::StatusOr<Eigen::Vector3f> DeformableTriangulation(TemporalBuffer& temporal
     unprojected_keypoint /= unprojected_keypoint.z();
 
     Eigen::Vector3f triangulated_landmark_position =
-            ((*last_camera_transform_world).inverse() * (unprojected_keypoint * current_depth));
+        ((*last_camera_transform_world).inverse() * (unprojected_keypoint * current_depth));
 
     return triangulated_landmark_position;
 }
 
-class TemporalPoint {
+class TemporalPoint
+{
 public:
     TemporalPoint() = delete;
 
-    TemporalPoint(ID mappoint_id_1, ID mappoint_id_2, ID keyframe_id_1, ID keyframe_id_2){
+    TemporalPoint(ID mappoint_id_1, ID mappoint_id_2, ID keyframe_id_1, ID keyframe_id_2)
+    {
         mappoint_id_1_ = min(mappoint_id_1, mappoint_id_2);
         mappoint_id_2_ = max(mappoint_id_1, mappoint_id_2);
         keyframe_id_1_ = min(keyframe_id_1, keyframe_id_2);
         keyframe_id_2_ = max(keyframe_id_1, keyframe_id_2);
     }
 
-    bool operator==(const TemporalPoint& rhs) const {
+    bool operator==(const TemporalPoint &rhs) const
+    {
         return this->mappoint_id_1_ == rhs.mappoint_id_1_ && this->mappoint_id_2_ == rhs.mappoint_id_2_ &&
                this->keyframe_id_1_ == rhs.keyframe_id_1_ && this->keyframe_id_2_ == rhs.keyframe_id_2_;
     }
 
     struct HashFunction
     {
-        size_t operator()(const TemporalPoint& point) const
+        size_t operator()(const TemporalPoint &point) const
         {
             size_t mappoint_1_hash = std::hash<ID>()(point.mappoint_id_1_);
             size_t mappoint_2_hash = std::hash<ID>()(point.keyframe_id_2_) << 1;
@@ -846,24 +995,27 @@ private:
     ID keyframe_id_1_, keyframe_id_2_;
 };
 
-class SpatialPoint {
+class SpatialPoint
+{
 public:
     SpatialPoint() = delete;
 
-    SpatialPoint(ID mappoint_id_1, ID mappoint_id_2, ID keyframe_id){
+    SpatialPoint(ID mappoint_id_1, ID mappoint_id_2, ID keyframe_id)
+    {
         mappoint_id_1_ = min(mappoint_id_1, mappoint_id_2);
         mappoint_id_2_ = max(mappoint_id_1, mappoint_id_2);
         keyframe_id_ = keyframe_id;
     }
 
-    bool operator==(const SpatialPoint& rhs) const {
+    bool operator==(const SpatialPoint &rhs) const
+    {
         return this->mappoint_id_1_ == rhs.mappoint_id_1_ && this->mappoint_id_2_ == rhs.mappoint_id_2_ &&
                this->keyframe_id_ == rhs.keyframe_id_;
     }
 
     struct HashFunction
     {
-        size_t operator()(const SpatialPoint& point) const
+        size_t operator()(const SpatialPoint &point) const
         {
             size_t mappoint_1_hash = std::hash<ID>()(point.mappoint_id_1_);
             size_t mappoint_2_hash = std::hash<ID>()(point.mappoint_id_2_) << 1;
@@ -878,14 +1030,14 @@ private:
 };
 
 void LocalDeformableBundleAdjustment(std::shared_ptr<Map> map,
-                                     const float scale) {
+                                     const float scale)
+{
     // Create optimizer.
     g2o::SparseOptimizer optimizer;
-    std::unique_ptr<g2o::BlockSolverX::LinearSolverType> linearSolver =  g2o::make_unique<g2o::LinearSolverEigen<g2o::BlockSolverX::PoseMatrixType>>();
+    std::unique_ptr<g2o::BlockSolverX::LinearSolverType> linearSolver = g2o::make_unique<g2o::LinearSolverEigen<g2o::BlockSolverX::PoseMatrixType>>();
 
-    g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(
-            g2o::make_unique<g2o::BlockSolverX>(std::move(linearSolver))
-    );
+    g2o::OptimizationAlgorithmLevenberg *solver = new g2o::OptimizationAlgorithmLevenberg(
+        g2o::make_unique<g2o::BlockSolverX>(std::move(linearSolver)));
 
     optimizer.setAlgorithm(solver);
 
@@ -896,30 +1048,34 @@ void LocalDeformableBundleAdjustment(std::shared_ptr<Map> map,
 
     // Get window of KeyFrames and set their vertices
     int biggest_keyframe_idx = 0;
-    for (auto it = keyframes.rbegin(); it != keyframes.rend(); it++) {
-        if (keyframes_in_optimization.size() >= max_keyframes_in_optimization) {
+    for (auto it = keyframes.rbegin(); it != keyframes.rend(); it++)
+    {
+        if (keyframes_in_optimization.size() >= max_keyframes_in_optimization)
+        {
             break;
         }
 
         auto keyframe = it->second;
 
-        g2o::VertexSE3Expmap* camera_pose_vertex = new g2o::VertexSE3Expmap();
+        g2o::VertexSE3Expmap *camera_pose_vertex = new g2o::VertexSE3Expmap();
         Sophus::SE3f camera_transform_world = keyframe->CameraTransformationWorld();
         camera_pose_vertex->setEstimate(g2o::SE3Quat(
-                camera_transform_world.unit_quaternion().cast<double>(),
-                camera_transform_world.translation().cast<double>()));
+            camera_transform_world.unit_quaternion().cast<double>(),
+            camera_transform_world.translation().cast<double>()));
         camera_pose_vertex->setId(keyframe->GetId());
 
         optimizer.addVertex(camera_pose_vertex);
 
         keyframes_in_optimization.push_back(keyframe);
 
-        if (biggest_keyframe_idx < keyframe->GetId()) {
+        if (biggest_keyframe_idx < keyframe->GetId())
+        {
             biggest_keyframe_idx = keyframe->GetId();
         }
     }
 
-    if (keyframes_in_optimization.size() < 3) {
+    if (keyframes_in_optimization.size() < 3)
+    {
         return;
     }
 
@@ -927,14 +1083,16 @@ void LocalDeformableBundleAdjustment(std::shared_ptr<Map> map,
     absl::btree_map<ID, absl::btree_map<ID, int>> inserted_landmarks;
     int current_optimization_idx = biggest_keyframe_idx + 1;
     int n_inserted_landmarks = 0;
-    for (auto it = keyframes_in_optimization.rbegin(); it != keyframes_in_optimization.rend(); it++) {
+    for (auto it = keyframes_in_optimization.rbegin(); it != keyframes_in_optimization.rend(); it++)
+    {
         auto keyframe = *it;
         ID keyframe_id = keyframe->GetId();
 
         auto landmark_positions = keyframe->GetLandmarkPositionsWithStatus({TRACKED_WITH_3D});
         auto mappoint_ids = keyframe->GetMapPointsIdsWithStatus({TRACKED_WITH_3D});
 
-        for (int idx = 0; idx < landmark_positions.size(); idx++) {
+        for (int idx = 0; idx < landmark_positions.size(); idx++)
+        {
             ID mappoint_id = mappoint_ids[idx];
             Eigen::Vector3f landmark_position = landmark_positions[idx];
 
@@ -963,13 +1121,13 @@ void LocalDeformableBundleAdjustment(std::shared_ptr<Map> map,
     const float th_huber_3dof_squared = 0.584;
     const float th_huber_3dof = sqrt(th_huber_3dof_squared);
 
-    const float sigma_reprojection = 0.5;   // pixels.
+    const float sigma_reprojection = 0.5; // pixels.
     const float info_reprojection = 1.0f / (sigma_reprojection * sigma_reprojection);
 
-    const float sigma_position = 0.1f;//  * 0.0394105;
+    const float sigma_position = 0.1f; //  * 0.0394105;
     const float info_position = 1.0f / (sigma_position * sigma_position);
 
-    const float sigma_spatial = 0.1 * scale;   // mm.
+    const float sigma_spatial = 0.1 * scale; // mm.
     const float info_spatial = 1.0f / (sigma_spatial * sigma_spatial);
 
     auto regularization_graph = map->GetRegularizationGraph();
@@ -978,15 +1136,17 @@ void LocalDeformableBundleAdjustment(std::shared_ptr<Map> map,
     // in the optimization in the following manner:
     //      inserted_landmarks[keyframe_id][mappoint_id] = idx_in_optimization;
     absl::flat_hash_set<SpatialPoint, SpatialPoint::HashFunction> spring_edges;
-    absl::flat_hash_set<TemporalPoint,TemporalPoint::HashFunction> dumper_edges;
-    for (auto it = keyframes_in_optimization.rbegin(); it != keyframes_in_optimization.rend(); it++) {
+    absl::flat_hash_set<TemporalPoint, TemporalPoint::HashFunction> dumper_edges;
+    for (auto it = keyframes_in_optimization.rbegin(); it != keyframes_in_optimization.rend(); it++)
+    {
         auto keyframe = *it;
         ID keyframe_id = keyframe->GetId();
 
         auto next_it = next(it);
         shared_ptr<KeyFrame> next_keyframe = nullptr;
         int next_keyframe_id = -1;
-        if (next_it != keyframes_in_optimization.rend()) {
+        if (next_it != keyframes_in_optimization.rend())
+        {
             next_keyframe = *next_it;
             next_keyframe_id = next_keyframe->GetId();
         }
@@ -995,7 +1155,8 @@ void LocalDeformableBundleAdjustment(std::shared_ptr<Map> map,
         auto mappoint_ids = keyframe->GetMapPointsIdsWithStatus({TRACKED_WITH_3D});
         auto keypoints = keyframe->GetKeypointsWithStatus({TRACKED_WITH_3D});
 
-        for (int idx = 0; idx < landmark_positions.size(); idx++) {
+        for (int idx = 0; idx < landmark_positions.size(); idx++)
+        {
             ID mappoint_id = mappoint_ids[idx];
             Eigen::Vector3f landmark_position = landmark_positions[idx];
             cv::KeyPoint keypoint = keypoints[idx];
@@ -1011,9 +1172,9 @@ void LocalDeformableBundleAdjustment(std::shared_ptr<Map> map,
             reprojection_error->setMeasurement(observation);
 
             reprojection_error->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(
-                    optimizer.vertex(keyframe_id)));
+                                                 optimizer.vertex(keyframe_id)));
             reprojection_error->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex *>(
-                    optimizer.vertex(landmark_optimization_index)));
+                                                 optimizer.vertex(landmark_optimization_index)));
 
             reprojection_error->setInformation(Eigen::Matrix2d::Identity() * info_reprojection);
 
@@ -1027,24 +1188,28 @@ void LocalDeformableBundleAdjustment(std::shared_ptr<Map> map,
 
             // Set up position regularizers.
             auto regularization_edges =
-                    regularization_graph->GetEdges(mappoint_id);
+                regularization_graph->GetEdges(mappoint_id);
 
             int n_regularizers = 0;
-            for (const auto &[mappoint_id_other, regularization_edge]: regularization_edges) {
+            for (const auto &[mappoint_id_other, regularization_edge] : regularization_edges)
+            {
                 // Check if there is already enough regularizers or if the connection is good.
                 if (n_regularizers > regularizers_per_point ||
-                    regularization_edge->status == RegularizationGraph::BAD) {
+                    regularization_edge->status == RegularizationGraph::BAD)
+                {
                     break;
                 }
 
                 // Check the other landmark is observed by the Keyframe.
-                if (!inserted_landmarks[keyframe_id].contains(mappoint_id_other)) {
+                if (!inserted_landmarks[keyframe_id].contains(mappoint_id_other))
+                {
                     continue;
                 }
 
                 // Check if this regularizer has already been inserted in the optimization.
                 SpatialPoint spring_connection(mappoint_id, mappoint_id_other, keyframe_id);
-                if (spring_edges.contains(spring_connection)) {
+                if (spring_edges.contains(spring_connection))
+                {
                     n_regularizers++;
                     continue;
                 }
@@ -1052,18 +1217,18 @@ void LocalDeformableBundleAdjustment(std::shared_ptr<Map> map,
                 spring_edges.insert(spring_connection);
 
                 const int other_landmark_optimization_index =
-                        inserted_landmarks[keyframe_id][mappoint_id_other];
+                    inserted_landmarks[keyframe_id][mappoint_id_other];
 
                 auto position_regularizer = new PositionRegularizer();
                 position_regularizer->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(
-                        optimizer.vertex(landmark_optimization_index)));
+                                                       optimizer.vertex(landmark_optimization_index)));
                 position_regularizer->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex *>(
-                        optimizer.vertex(other_landmark_optimization_index)));
+                                                       optimizer.vertex(other_landmark_optimization_index)));
 
                 position_regularizer->setMeasurement(regularization_edge->first_distance);
 
                 Eigen::Matrix<double, 1, 1> position_information_matrix =
-                        Eigen::Matrix<double, 1, 1>::Identity() * info_position;
+                    Eigen::Matrix<double, 1, 1>::Identity() * info_position;
                 position_regularizer->setInformation(position_information_matrix);
 
                 position_regularizer->k_ = 1.1f;
@@ -1073,32 +1238,38 @@ void LocalDeformableBundleAdjustment(std::shared_ptr<Map> map,
                 n_regularizers++;
             }
 
-            if (next_keyframe) {
-                if (!inserted_landmarks[next_keyframe_id].contains(mappoint_id)) {
+            if (next_keyframe)
+            {
+                if (!inserted_landmarks[next_keyframe_id].contains(mappoint_id))
+                {
                     continue;
                 }
 
                 const int next_landmark_optimization_index =
-                        inserted_landmarks[next_keyframe_id][mappoint_id];
+                    inserted_landmarks[next_keyframe_id][mappoint_id];
 
                 // Set up position regularizers
                 int n_regularizers = 0;
-                for (const auto &[mappoint_id_other, regularization_edge]: regularization_edges) {
+                for (const auto &[mappoint_id_other, regularization_edge] : regularization_edges)
+                {
                     // Check if there is already enough regularizers or if the connection is good.
                     if (n_regularizers > regularizers_per_point ||
-                        regularization_edge->status == RegularizationGraph::BAD) {
+                        regularization_edge->status == RegularizationGraph::BAD)
+                    {
                         break;
                     }
 
                     // Check both Mappoints are observed by the next Keyframe
                     if (!inserted_landmarks[keyframe_id].contains(mappoint_id_other) ||
-                        !inserted_landmarks[next_keyframe_id].contains(mappoint_id_other)) {
+                        !inserted_landmarks[next_keyframe_id].contains(mappoint_id_other))
+                    {
                         continue;
                     }
 
                     // Check if this regularizer has already been inserted in the optimization.
                     TemporalPoint dumper_connection(mappoint_id, mappoint_id_other, keyframe_id, next_keyframe_id);
-                    if (dumper_edges.contains(dumper_connection)) {
+                    if (dumper_edges.contains(dumper_connection))
+                    {
                         n_regularizers++;
                         continue;
                     }
@@ -1106,24 +1277,24 @@ void LocalDeformableBundleAdjustment(std::shared_ptr<Map> map,
                     dumper_edges.insert(dumper_connection);
 
                     const int other_landmark_optimization_index =
-                            inserted_landmarks[keyframe_id][mappoint_id_other];
+                        inserted_landmarks[keyframe_id][mappoint_id_other];
                     const int next_other_landmark_optimization_index =
-                            inserted_landmarks[next_keyframe_id][mappoint_id_other];
+                        inserted_landmarks[next_keyframe_id][mappoint_id_other];
 
-                    SpatialRegularizer* spatial_regularizer = new SpatialRegularizer();
-                    spatial_regularizer->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(
-                            optimizer.vertex(landmark_optimization_index)));
-                    spatial_regularizer->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(
-                            optimizer.vertex(other_landmark_optimization_index)));
-                    spatial_regularizer->setVertex(2, dynamic_cast<g2o::OptimizableGraph::Vertex*>(
-                            optimizer.vertex(next_landmark_optimization_index)));
-                    spatial_regularizer->setVertex(3, dynamic_cast<g2o::OptimizableGraph::Vertex*>(
-                            optimizer.vertex(next_other_landmark_optimization_index)));
+                    SpatialRegularizer *spatial_regularizer = new SpatialRegularizer();
+                    spatial_regularizer->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(
+                                                          optimizer.vertex(landmark_optimization_index)));
+                    spatial_regularizer->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex *>(
+                                                          optimizer.vertex(other_landmark_optimization_index)));
+                    spatial_regularizer->setVertex(2, dynamic_cast<g2o::OptimizableGraph::Vertex *>(
+                                                          optimizer.vertex(next_landmark_optimization_index)));
+                    spatial_regularizer->setVertex(3, dynamic_cast<g2o::OptimizableGraph::Vertex *>(
+                                                          optimizer.vertex(next_other_landmark_optimization_index)));
 
                     Eigen::Matrix3d spatial_information_matrix = Eigen::Matrix3d::Identity() * info_spatial;
                     spatial_regularizer->setInformation(spatial_information_matrix);
 
-                    g2o::RobustKernelHuber* robust_kernel = new g2o::RobustKernelHuber;
+                    g2o::RobustKernelHuber *robust_kernel = new g2o::RobustKernelHuber;
                     robust_kernel->setDelta(th_huber_3dof);
                     spatial_regularizer->setRobustKernel(robust_kernel);
 
@@ -1143,16 +1314,18 @@ void LocalDeformableBundleAdjustment(std::shared_ptr<Map> map,
     optimizer.optimize(5);
 
     // Recover optimized variables.
-    for (const auto [keyframe_id, mappoint_id_to_idx] : inserted_landmarks) {
+    for (const auto [keyframe_id, mappoint_id_to_idx] : inserted_landmarks)
+    {
         // Update KeyFrame pose
-        auto keyframe_vertex = static_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(keyframe_id));
+        auto keyframe_vertex = static_cast<g2o::VertexSE3Expmap *>(optimizer.vertex(keyframe_id));
         auto keyframe = map->GetKeyFrame(keyframe_id);
         keyframe->CameraTransformationWorld() = Sophus::SE3f(
-                keyframe_vertex->estimate().to_homogeneous_matrix().cast<float>());
+            keyframe_vertex->estimate().to_homogeneous_matrix().cast<float>());
 
         // Update landmark positions
-        for (const auto [mappoint_id, idx_in_optimization] : mappoint_id_to_idx) {
-            auto landmark_vertex = static_cast<LandmarkVertex*>(optimizer.vertex(idx_in_optimization));
+        for (const auto [mappoint_id, idx_in_optimization] : mappoint_id_to_idx)
+        {
+            auto landmark_vertex = static_cast<LandmarkVertex *>(optimizer.vertex(idx_in_optimization));
 
             int idx_in_keyframe = keyframe->MapPointIdToIndex().at(mappoint_id);
             keyframe->LandmarkPositions()[idx_in_keyframe] = landmark_vertex->estimate().cast<float>();
