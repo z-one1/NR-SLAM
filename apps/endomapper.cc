@@ -68,6 +68,7 @@ int main(int argc, char **argv) {
 
         SLAM.TrackImage(*image);
     }
+    SLAM.SaveTraj();
 
     return 0;
 }

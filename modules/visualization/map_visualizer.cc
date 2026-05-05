@@ -24,6 +24,8 @@
 #include "absl/log/log.h"
 #include "absl/log/check.h"
 
+#include "map/surfel_map.h"
+
 using namespace std;
 
 MapVisualizer::MapVisualizer(Options& options, shared_ptr<Map> map) :
@@ -107,6 +109,9 @@ void MapVisualizer::InitializePangolin() {
     show_ground_truth_ = shared_ptr<pangolin::Var<bool>>(
             new pangolin::Var<bool>("ui.Show GroundTruth", false, true));
 
+    show_surfels_ = shared_ptr<pangolin::Var<bool>>(
+            new pangolin::Var<bool>("ui.Show Surfels", true, true));
+
 }
 
 void MapVisualizer::Run() {
@@ -152,10 +157,12 @@ void MapVisualizer::RenderLeftDisplay() {
 void MapVisualizer::RenderRightDisplay() {
     right_display.Activate(right_renderer_);
 
-    DrawLastFrame();
-    DrawKeyFrames();
     DrawLatestTrajectory();
-    DrawNonTrackedLandmarks();
+    DrawKeyFrames();
+
+    if (*show_surfels_) {
+        DrawSurfels();
+    }
 }
 
 void MapVisualizer::FinishVisualization() {
@@ -353,6 +360,48 @@ void MapVisualizer::DrawNonTrackedLandmarks() {
 
     Draw3DPoints(non_tracked_3d, Eigen::Vector3f(0, 0, 0));
     Draw3DPoints(non_tracked_active_3d, Eigen::Vector3f(0, 0, 0));
+}
+
+void MapVisualizer::UpdateSurfelData(const SurfMap* surf_map) {
+    if (!surf_map) return;
+
+    auto all_surfels = surf_map->GetAllSurfelsForRendering();
+
+    std::vector<SurfelVertex> buf;
+    buf.reserve(all_surfels.size());
+
+    for (const auto& s : all_surfels) {
+        SurfelVertex v;
+        v.x = s->position.x();
+        v.y = s->position.y();
+        v.z = s->position.z();
+        v.r = s->color.x();
+        v.g = s->color.y();
+        v.b = s->color.z();
+        v.is_active = s->IsActive();
+        buf.push_back(v);
+    }
+
+    std::lock_guard<std::mutex> lock(surfel_mutex_);
+    surfel_buf_ = std::move(buf);
+}
+
+void MapVisualizer::DrawSurfels() {
+    std::lock_guard<std::mutex> lock(surfel_mutex_);
+    if (surfel_buf_.empty()) return;
+
+    glPointSize(3);
+    glBegin(GL_POINTS);
+    for (const auto& v : surfel_buf_) {
+        if (v.is_active) {
+            glColor3f(v.r, v.g, v.b);
+        } else {
+            // Finalized surfels: slightly dimmer
+            glColor3f(v.r * 0.7f, v.g * 0.7f, v.b * 0.7f);
+        }
+        glVertex3f(v.x, v.y, v.z);
+    }
+    glEnd();
 }
 
 void MapVisualizer::SaveRenderToDisk() {

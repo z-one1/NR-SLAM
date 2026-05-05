@@ -25,7 +25,17 @@
 #include <pangolin/pangolin.h>
 
 #include <memory>
+#include <mutex>
+#include <vector>
 #include <sophus/se3.hpp>
+
+class SurfMap;
+
+struct SurfelVertex {
+    float x, y, z;    // world position
+    float r, g, b;    // color [0,1]
+    bool  is_active;  // active vs finalized
+};
 
 class MapVisualizer {
 public:
@@ -45,6 +55,10 @@ public:
     void Run();
 
     void SetFinish();
+
+    // Called from the tracking thread after each frame.
+    // Copies surfel data into a thread-safe buffer for rendering.
+    void UpdateSurfelData(const SurfMap* surf_map);
 
 private:
     void RenderVisualization();
@@ -79,6 +93,8 @@ private:
 
     void DrawNonTrackedLandmarks();
 
+    void DrawSurfels();
+
     void SaveRenderToDisk();
 
     // Pangolin fields for visualization.
@@ -87,6 +103,11 @@ private:
 
     // GUI controls.
     std::shared_ptr<pangolin::Var<bool>> show_ground_truth_;
+    std::shared_ptr<pangolin::Var<bool>> show_surfels_;
+
+    // Thread-safe surfel buffer (written by tracking thread, read by render thread).
+    std::mutex surfel_mutex_;
+    std::vector<SurfelVertex> surfel_buf_;
 
     pangolin::View main_display_;
 

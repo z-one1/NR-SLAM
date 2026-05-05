@@ -51,7 +51,18 @@ KeyFrame::KeyFrame(Frame &frame) {
     camera_transformation_world_ = frame.CameraTransformationWorld();
     calibration_ = frame.GetCalibration();
 
+    // 拷贝逐路标形变向量，保留形变先验供后续 BA 使用
+    deformations_ = frame.Deformations();
+
     id_ = nextId_++;
+}
+
+const std::vector<Eigen::Vector3f>& KeyFrame::Deformations() const {
+    return deformations_;
+}
+
+std::vector<Eigen::Vector3f>& KeyFrame::MutableDeformations() {
+    return deformations_;
 }
 
 std::vector<cv::KeyPoint> &KeyFrame::Keypoints() {

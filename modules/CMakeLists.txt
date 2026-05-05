@@ -4,6 +4,7 @@ find_package(OpenCV 4 REQUIRED)
 find_package(Boost REQUIRED COMPONENTS filesystem)
 find_package(MLPACK REQUIRED)
 find_package(Pangolin REQUIRED)
+find_package(fmt REQUIRED)
 
 set(LIBRARY_NAME NR-SLAM)
 
@@ -24,7 +25,9 @@ set(HEADER_FILES
         ${root}/map/map.h
         ${root}/map/mappoint.h
         ${root}/map/regularization_graph.h
+        ${root}/map/surfel_map.h
         ${root}/map/temporal_buffer.h
+        ${root}/sdf/sdf_builder.h
         ${root}/mapping/mapping.h
         ${root}/masking/bright_filter.h
         ${root}/masking/border_filter.h
@@ -50,6 +53,7 @@ set(HEADER_FILES
         ${root}/tracking/essential_matrix_initialization.h
         ${root}/tracking/monocular_map_initializer.h
         ${root}/tracking/tracking.h
+        ${root}/tracking/icp_point2plane.h
         ${root}/utilities/dbscan.h
         ${root}/utilities/frame_evaluator.h
         ${root}/utilities/geometry_toolbox.h
@@ -74,7 +78,9 @@ set(SOURCE_FILES
         ${root}/map/map.cc
         ${root}/map/mappoint.cc
         ${root}/map/regularization_graph.cc
+        ${root}/map/surfel_map.cc
         ${root}/map/temporal_buffer.cc
+        ${root}/sdf/sdf_builder.cc
         ${root}/mapping/mapping.cc
         ${root}/masking/bright_filter.cc
         ${root}/masking/border_filter.cc
@@ -100,6 +106,7 @@ set(SOURCE_FILES
         ${root}/tracking/essential_matrix_initialization.cc
         ${root}/tracking/monocular_map_initializer.cc
         ${root}/tracking/tracking.cc
+        ${root}/tracking/icp_point2plane.cc
         ${root}/utilities/dbscan.cc
         ${root}/utilities/frame_evaluator.cc
         ${root}/utilities/geometry_toolbox.cc
@@ -145,7 +152,7 @@ target_link_libraries(${LIBRARY_NAME}
         absl::log_streamer
         ${OpenCV_LIBS}
         ${Boost_LIBRARIES}
-        fmt
+        fmt::fmt
         ${Pangolin_LIBRARIES}
         ${MLPACK_LIBRARIES}
         armadillo

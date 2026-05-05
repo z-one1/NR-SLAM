@@ -93,6 +93,12 @@ this dataset, both the real and simulated videos.
                        --starting_frame <starting_frame> 
                        --end_frame <last_frame>
 ```
+```
+./build/bin/simulation --dataset_path <dataset_folder> 
+                       --settings_path .data/simulation/settings.yaml 
+                       --starting_frame <starting_frame> 
+                       --end_frame <last_frame>
+```
 
 # 5. Hamlyn Examples
 [Hamlyn dataset](http://hamlyn.doc.ic.ac.uk/vision/) is a set of endoscopy sequences recorded with a monocular and stereo endoscope. 

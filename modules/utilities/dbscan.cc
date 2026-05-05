@@ -104,7 +104,8 @@ std::vector<int> Dbscan3D(std::vector<Eigen::Vector3f>& points){
 }
 
 std::vector<int> DbscanND(std::vector<Eigen::VectorXf>& points){
-    const float epsilon = 0.1 * points[0].size();
+    // const float epsilon = 0.1 * points[0].size();
+    const float epsilon = 1 * points[0].size();
     mlpack::DBSCAN<RangeSearch<>,OrderedPointSelection>
             clustering(epsilon, 10);
 

@@ -171,6 +171,48 @@ Settings::Settings(const std::string& configFile) {
         LOG(ERROR) << "Parameter Evaluation.save_path not found";
         exit(-1);
     }
+
+    sdf_voxel_size_                  = readOptional<float>(fSettings, "SDF.voxel_size", 0.0025f);
+    sdf_truncation_distance_         = readOptional<float>(fSettings, "SDF.truncation_distance", 0.0100f);
+    sdf_dense_pixel_stride_          = readOptional<int>(fSettings, "SDF.dense_pixel_stride", 2);
+    sdf_dense_weight_                = readOptional<float>(fSettings, "SDF.dense_weight", 1.0f);
+    sdf_sparse_weight_               = readOptional<float>(fSettings, "SDF.sparse_weight", 5.0f);
+    sdf_max_voxel_updates_per_frame_ = readOptional<int>(fSettings, "SDF.max_voxel_updates_per_frame", 300000);
+    sdf_min_depth_                   = readOptional<float>(fSettings, "SDF.min_depth", 0.01f);
+    sdf_max_depth_                   = readOptional<float>(fSettings, "SDF.max_depth", 8.00f);
+    sdf_sparse_min_points_           = readOptional<int>(fSettings, "SDF.sparse_min_points", 20);
+
+    surfel_sdf_constraint_enabled_   = readOptional<bool>(fSettings, "SurfelSDF.constraint_enabled", false);
+    surfel_sdf_phi_abs_threshold_    = readOptional<float>(fSettings, "SurfelSDF.phi_abs_threshold", 0.20f);
+    surfel_sdf_normal_cos_threshold_ = readOptional<float>(fSettings, "SurfelSDF.normal_cos_threshold", 0.30f);
+    surfel_sdf_project_to_surface_   = readOptional<bool>(fSettings, "SurfelSDF.project_to_surface", false);
+
+    surfmap_window_size_ = readOptional<int>(fSettings, "SurfMap.window_size", 8);
+    surfmap_min_depth_ = readOptional<float>(fSettings, "SurfMap.min_depth", 0.02f);
+    surfmap_max_depth_ = readOptional<float>(fSettings, "SurfMap.max_depth", 1.00f);
+    surfmap_default_radius_ = readOptional<float>(fSettings, "SurfMap.default_surfel_radius", 0.003f);
+    surfmap_use_adaptive_radius_ = readOptional<bool>(fSettings, "SurfMap.use_adaptive_radius", true);
+    surfmap_sample_step_ = readOptional<int>(fSettings, "SurfMap.surfel_sample_step", 4);
+    surfmap_max_new_per_frame_ = readOptional<int>(fSettings, "SurfMap.max_new_surfels_per_frame", 10000);
+    surfmap_fusion_distance_threshold_ = readOptional<float>(fSettings, "SurfMap.fusion_distance_threshold", 0.01f);
+    surfmap_fusion_normal_threshold_ = readOptional<float>(fSettings, "SurfMap.fusion_normal_threshold", 0.85f);
+    surfmap_spatial_search_radius_ = readOptional<float>(fSettings, "SurfMap.spatial_search_radius", 0.02f);
+    surfmap_active_min_depth_ = readOptional<float>(fSettings, "SurfMap.active_min_depth", 0.02f);
+    surfmap_active_max_depth_ = readOptional<float>(fSettings, "SurfMap.active_max_depth", 0.10f);
+    surfmap_confidence_decay_rate_ = readOptional<float>(fSettings, "SurfMap.confidence_decay_rate", 0.10f);
+    surfmap_min_confidence_ = readOptional<float>(fSettings, "SurfMap.min_surfel_confidence", 0.30f);
+    surfmap_warp_sigma_ = readOptional<float>(fSettings, "SurfMap.warp_sigma", 0.03f);
+    surfmap_warp_max_disp_ = readOptional<float>(fSettings, "SurfMap.warp_max_disp", 0.10f);
+    surfmap_quality_mode_ = readOptional<string>(fSettings, "SurfMap.quality_mode", string("realtime"));
+    surfmap_min_radius_ = readOptional<float>(fSettings, "SurfMap.min_surfel_radius", 0.001f);
+    surfmap_max_radius_ = readOptional<float>(fSettings, "SurfMap.max_surfel_radius", 0.006f);
+    surfmap_radius_scale_ = readOptional<float>(fSettings, "SurfMap.radius_scale", 1.5f);
+    surfmap_max_depth_gradient_ = readOptional<float>(fSettings, "SurfMap.max_depth_gradient", 0.030f);
+    surfmap_mask_border_pixels_ = readOptional<int>(fSettings, "SurfMap.mask_border_pixels", 1);
+    surfmap_max_fused_per_frame_ = readOptional<int>(fSettings, "SurfMap.max_fused_surfels_per_frame", 0);
+    surfmap_max_added_per_frame_ = readOptional<int>(fSettings, "SurfMap.max_added_surfels_per_frame", 0);
+    surfmap_color_update_max_residual_ = readOptional<float>(fSettings, "SurfMap.color_update_max_residual", 0.35f);
+    surfmap_color_update_soft_residual_ = readOptional<float>(fSettings, "SurfMap.color_update_soft_residual", 0.15f);
 }
 
 ostream &operator<<(std::ostream& output, const Settings& settings){
@@ -228,4 +270,160 @@ std::string Settings::GetImageVisualizerPath() {
 
 std::string Settings::GetEvaluationPath() {
     return evaluation_save_path_;
+}
+
+float Settings::GetSDFVoxelSize() {
+    return sdf_voxel_size_;
+}
+
+float Settings::GetSDFTruncationDistance() {
+    return sdf_truncation_distance_;
+}
+
+int Settings::GetSDFDensePixelStride() {
+    return sdf_dense_pixel_stride_;
+}
+
+float Settings::GetSDFDenseWeight() {
+    return sdf_dense_weight_;
+}
+
+float Settings::GetSDFSparseWeight() {
+    return sdf_sparse_weight_;
+}
+
+int Settings::GetSDFMaxVoxelUpdatesPerFrame() {
+    return sdf_max_voxel_updates_per_frame_;
+}
+
+float Settings::GetSDFMinDepth() {
+    return sdf_min_depth_;
+}
+
+float Settings::GetSDFMaxDepth() {
+    return sdf_max_depth_;
+}
+
+int Settings::GetSDFSparseMinPoints() {
+    return sdf_sparse_min_points_;
+}
+
+bool Settings::GetSurfelSDFConstraintEnabled() {
+    return surfel_sdf_constraint_enabled_;
+}
+
+float Settings::GetSurfelSDFPhiAbsThreshold() {
+    return surfel_sdf_phi_abs_threshold_;
+}
+
+float Settings::GetSurfelSDFNormalCosThreshold() {
+    return surfel_sdf_normal_cos_threshold_;
+}
+
+bool Settings::GetSurfelSDFProjectToSurface() {
+    return surfel_sdf_project_to_surface_;
+}
+
+int Settings::GetSurfMapWindowSize() {
+    return surfmap_window_size_;
+}
+
+float Settings::GetSurfMapMinDepth() {
+    return surfmap_min_depth_;
+}
+
+float Settings::GetSurfMapMaxDepth() {
+    return surfmap_max_depth_;
+}
+
+float Settings::GetSurfMapDefaultRadius() {
+    return surfmap_default_radius_;
+}
+
+bool Settings::GetSurfMapUseAdaptiveRadius() {
+    return surfmap_use_adaptive_radius_;
+}
+
+int Settings::GetSurfMapSampleStep() {
+    return surfmap_sample_step_;
+}
+
+int Settings::GetSurfMapMaxNewPerFrame() {
+    return surfmap_max_new_per_frame_;
+}
+
+float Settings::GetSurfMapFusionDistanceThreshold() {
+    return surfmap_fusion_distance_threshold_;
+}
+
+float Settings::GetSurfMapFusionNormalThreshold() {
+    return surfmap_fusion_normal_threshold_;
+}
+
+float Settings::GetSurfMapSpatialSearchRadius() {
+    return surfmap_spatial_search_radius_;
+}
+
+float Settings::GetSurfMapActiveMinDepth() {
+    return surfmap_active_min_depth_;
+}
+
+float Settings::GetSurfMapActiveMaxDepth() {
+    return surfmap_active_max_depth_;
+}
+
+float Settings::GetSurfMapConfidenceDecayRate() {
+    return surfmap_confidence_decay_rate_;
+}
+
+float Settings::GetSurfMapMinConfidence() {
+    return surfmap_min_confidence_;
+}
+
+float Settings::GetSurfMapWarpSigma() {
+    return surfmap_warp_sigma_;
+}
+
+float Settings::GetSurfMapWarpMaxDisp() {
+    return surfmap_warp_max_disp_;
+}
+
+std::string Settings::GetSurfMapQualityMode() {
+    return surfmap_quality_mode_;
+}
+
+float Settings::GetSurfMapMinRadius() {
+    return surfmap_min_radius_;
+}
+
+float Settings::GetSurfMapMaxRadius() {
+    return surfmap_max_radius_;
+}
+
+float Settings::GetSurfMapRadiusScale() {
+    return surfmap_radius_scale_;
+}
+
+float Settings::GetSurfMapMaxDepthGradient() {
+    return surfmap_max_depth_gradient_;
+}
+
+int Settings::GetSurfMapMaskBorderPixels() {
+    return surfmap_mask_border_pixels_;
+}
+
+int Settings::GetSurfMapMaxFusedPerFrame() {
+    return surfmap_max_fused_per_frame_;
+}
+
+int Settings::GetSurfMapMaxAddedPerFrame() {
+    return surfmap_max_added_per_frame_;
+}
+
+float Settings::GetSurfMapColorUpdateMaxResidual() {
+    return surfmap_color_update_max_residual_;
+}
+
+float Settings::GetSurfMapColorUpdateSoftResidual() {
+    return surfmap_color_update_soft_residual_;
 }

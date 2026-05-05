@@ -21,6 +21,7 @@
 #define NRSLAM_LUCAS_KANADE_TRACKER_H
 
 #include "utilities/landmark_status.h"
+#include "absl/log/log.h"
 
 #include <opencv2/opencv.hpp>
 

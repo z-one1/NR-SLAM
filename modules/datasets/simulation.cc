@@ -42,7 +42,7 @@ Simulation::Simulation(const std::string &dataset_path) {
     names_file_reader.open(dataset_path + "/rgb.txt");
 
     if(!names_file_reader.is_open()){
-        LOG(FATAL) << "could not open names file at: " << dataset_path + "/names.txt";
+        LOG(FATAL) << "could not open names file at: " << dataset_path + "/rgb.txt";
         return;
     }
 
@@ -51,7 +51,9 @@ Simulation::Simulation(const std::string &dataset_path) {
     while(!names_file_reader.eof()){
         string image_name;
         getline(names_file_reader, image_name);
-        images_names_.push_back(image_name);
+        if (!image_name.empty()) {
+            images_names_.push_back(dataset_path + "/" + image_name);
+        }
     }
 
     names_file_reader.close();
@@ -69,7 +71,9 @@ Simulation::Simulation(const std::string &dataset_path) {
     while(!depth_names_reader.eof()){
         string image_name;
         getline(depth_names_reader, image_name);
-        depth_images_names_.push_back(image_name);
+        if(!image_name.empty()){
+            depth_images_names_.push_back(dataset_path + "/" + image_name);
+        }
     }
 
     depth_names_reader.close();
@@ -106,6 +110,69 @@ Simulation::Simulation(const std::string &dataset_path) {
     poses_file_reader.close();
 }
 
+bool Simulation::readPFM(const std::string& filename, cv::Mat& image) {
+    ifstream file(filename, ios::binary);
+    if (!file) return false;
+
+    string line;
+    getline(file, line); // PF or Pf
+    bool color = (line == "PF");
+
+    // 跳过注释行
+    do { if (!getline(file, line)) return false; }
+    while (!line.empty() && line[0] == '#');
+
+    istringstream dimensions(line);
+    int width = 0, height = 0;
+    dimensions >> width >> height;
+    if (width <= 0 || height <= 0) return false;
+
+    getline(file, line); // Scale
+    float scale = stof(line);
+    bool little_endian = scale < 0;
+    if (little_endian) scale = -scale;
+
+    int channels = color ? 3 : 1;
+    size_t num_pixels = static_cast<size_t>(width) * height * channels;
+
+    vector<float> buffer(num_pixels);
+    file.read(reinterpret_cast<char*>(buffer.data()), num_pixels * sizeof(float));
+    if (file.gcount() != static_cast<streamsize>(num_pixels * sizeof(float))) {
+        return false;
+    }
+
+    const uint32_t one = 1;
+    bool host_little_endian = *(reinterpret_cast<const char*>(&one)) == 1;
+    if (host_little_endian != little_endian) {
+        for (auto& val : buffer) {
+            uint8_t* bytes = reinterpret_cast<uint8_t*>(&val);
+            std::reverse(bytes, bytes + sizeof(float));
+        }
+    }
+
+    // 不做上下翻转
+    cv::Mat temp(height, width, color ? CV_32FC3 : CV_32FC1, buffer.data());
+    // 翻转到 OpenCV 的“自上而下”行序
+    cv::flip(temp, image, 0);
+    return true;
+}
+
+absl::StatusOr<cv::Mat> Simulation::GetNNImage(const int idx) {
+    std::string pfm_dir = "/home/zy/Python-Analysis/output/";
+    std::string pfm_prefix = "image_";
+    std::string pfm_suffix = "-dpt_hybrid_384.pfm";
+    std::stringstream ss;
+    ss << setw(4) << setfill('0') << idx;
+    std::string frame_id = ss.str();
+    std::string pfm_path = pfm_dir + pfm_prefix + frame_id + pfm_suffix;
+
+    cv::Mat pfm_image;
+    if (!readPFM(pfm_path, pfm_image)) {
+        return absl::InternalError("NN Image not found.");
+    }
+    return pfm_image;
+}
+
 absl::StatusOr<cv::Mat> Simulation::GetImage(const int idx) {
     if (idx >= images_names_.size()) {
         return absl::InternalError("Image index out boundaries.");
@@ -119,6 +186,7 @@ absl::StatusOr<cv::Mat> Simulation::GetDepthImage(const int idx) {
         return absl::InternalError("Image index out boundaries.");
     }
 
+    // LOG(INFO) << "DepthImage Path: " << depth_images_names_[idx];
     cv::Mat depth_image = cv::imread(depth_images_names_[idx], cv::IMREAD_ANYCOLOR | cv::IMREAD_ANYDEPTH);
 
     cv::Mat channels[3];
@@ -132,9 +200,13 @@ absl::StatusOr<cv::Mat> Simulation::GetDepthImage(const int idx) {
     float w = y / far_clip_;
 
     depth_image = 1.f / (z * (1 - depth_image) + w);
+    double minVal, maxVal;
+    cv::minMaxLoc(depth_image, &minVal, &maxVal);
+    // LOG(INFO) << "Decoded depth min/max: " << minVal << " / " << maxVal;
 
     return depth_image;
 }
+
 
 absl::StatusOr<Sophus::SE3f> Simulation::GetCameraPose(const int idx) {
     if (idx >= ground_truth_poses_.size()) {

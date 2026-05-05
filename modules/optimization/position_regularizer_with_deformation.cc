@@ -37,6 +37,8 @@ void PositionRegularizerWithDeformation::computeError() {
 
     double current_distance = (current_position_1 - current_position_2).norm();
 
+    // _measurement 是 g2o::BaseBinaryEdge 继承下来的成员变量
+    // 它需要在 外部用 setMeasurement() 设置
     _error(0) = k_ * (current_distance - _measurement) / _measurement;
 }
 
@@ -49,8 +51,15 @@ void PositionRegularizerWithDeformation::linearizeOplus() {
 
     double current_distance = (current_position_1 - current_position_2).norm();
 
-    double a = k_ / (2 * _measurement * current_distance);
-    Eigen::Vector3d v = 2 * current_position_1 - 2 * current_position_2;
+    //// 原版：这里分子分母都*2,意义不明
+    //// double a = k_ / (2 * _measurement * current_distance);
+    //// Eigen::Vector3d v = 2 * current_position_1 - 2 * current_position_2;
+
+    // 来自胡克定律 e = -k * (d - d0) / d0 其中 d = ||p1 - p2||
+    // Jacobine: partial e / partial v1 = (-k / d0) * ((p1 - p2) / ||p1 - p2||)
+    // _measurement 是 g2o::BaseBinaryEdge 的内置成员，从 setMeasurement(value) 设置
+    double a = k_ / (_measurement * current_distance); 
+    Eigen::Vector3d v = current_position_1 - current_position_2;
 
     _jacobianOplusXi = a * v.transpose();
     _jacobianOplusXj = -a * v.transpose();

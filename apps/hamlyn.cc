@@ -71,6 +71,7 @@ int main(int argc, char **argv) {
 
         SLAM.TrackImageWithStereo(*im_left, *im_right);
     }
+    SLAM.SaveTraj();
 
     return 0;
 }

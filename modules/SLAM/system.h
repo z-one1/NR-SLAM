@@ -24,6 +24,10 @@
 #include <memory>
 #include <thread>
 
+#include <fstream>
+#include <iomanip>
+#include <Eigen/Geometry>
+
 #include "map/map.h"
 #include "mapping/mapping.h"
 #include "SLAM/settings.h"
@@ -56,6 +60,21 @@ public:
     // Tracks the next image using a precomputed depth image.
     void TrackImageWithDepth(const cv::Mat& im_left, const cv::Mat& im_depth);
 
+    // Dense Tracking using Monocular Depth Estimation NN
+    void TrackImageWithNN(const cv::Mat& im_left, const cv::Mat& im_depth, const cv::Mat& im_nn);
+
+    vector<Eigen::Vector3f> GetTraj();
+
+    void SaveTraj();
+
+    bool ExportSurfMap(const std::string& filename,
+                       bool only_finalized = false);
+
+    bool ExportSDF(const std::string& filename,
+                   float max_abs_tsdf = 0.10f);
+
+    Tracking::RuntimeMetrics GetRuntimeMetrics() const;
+
 private:
     // Applies preprocessing to the input image (CLAHE, etc).
     cv::Mat ImageProcessing(const cv::Mat& im, cv::Mat& im_gray);
@@ -83,6 +102,11 @@ private:
     std::unique_ptr<FrameEvaluator> frame_evaluator_;
 
     std::unique_ptr<TimeProfiler> time_profiler_;
+
+    // === 新增：用来控制每帧 surfmap 导出 ===
+    size_t surf_export_frame_idx_ = 0;   // 当前是第几帧
+    int    surf_export_step_      = 1;   // 每多少帧导出一次：1=每帧, 5=每5帧
+    bool   surf_export_enabled_   = true;
 };
 
 #endif //NRSLAM_SYSTEM_H

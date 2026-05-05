@@ -65,6 +65,22 @@ public:
 
     std::vector<int> GetIndexWithStatus(
             const absl::flat_hash_set<LandmarkStatus> statuses);
+        
+    //! 06.04
+    std::vector<float> GetRigidWeightsWithStatus(
+            const absl::flat_hash_set<LandmarkStatus> statuses) const;
+
+    void SetAlignedDepth(const cv::Mat& Z);
+    const cv::Mat& GetAlignedDepth() const { return aligned_nn_depth_; }
+
+    // current_deformations_ 访问器
+    std::vector<Eigen::Vector3f>& MutableDeformations();
+            const std::vector<Eigen::Vector3f>& Deformations() const;
+
+    // rigid_weights_ 访问器
+    std::vector<float>& MutableRigidWeights();
+            const std::vector<float>& RigidWeights() const;
+
 
     void InsertObservation(const cv::KeyPoint& keypoint, const Eigen::Vector3f& landmark_position,
                            const ID mappoint_id, const LandmarkStatus status);
@@ -108,6 +124,13 @@ private:
     std::vector<cv::KeyPoint> keypoints_;
     std::vector<Eigen::Vector3f> landmark_positions_;
     std::vector<LandmarkStatus> landmark_status_;
+
+    //! 06.04
+    std::vector<Eigen::Vector3f> current_deformations_;
+    std::vector<float> rigid_weights_;
+
+    //! 09.18
+    cv::Mat aligned_nn_depth_;
 
     std::vector<absl::StatusOr<Eigen::Vector3f>> landmark_ground_truth_;
 

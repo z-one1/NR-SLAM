@@ -98,6 +98,7 @@ bool RegularizationGraph::UpdateConnection(ID mappoint_id_1, ID mappoint_id_2,
 
     Eigen::Vector3f relative_position = landmark_position_2 - landmark_position_1;
 
+    // 当前地图点和邻居点之间的距离变化没有超出预设的拉伸阈值 -> good_connection
     if (graph_[mappoint_id_1].contains(mappoint_id_2) &&
         graph_[mappoint_id_2].contains(mappoint_id_1)) {
 

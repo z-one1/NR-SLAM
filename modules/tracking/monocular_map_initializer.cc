@@ -91,8 +91,7 @@ void MonocularMapInitializer::ResetInitialization(const cv::Mat& im, const cv::M
     klt_tracker_.SetReferenceImage(im, current_keypoints_);
 
     current_keypoint_statuses_.resize(current_keypoints_.size());
-    fill(current_keypoint_statuses_.begin(), current_keypoint_statuses_.end(),
-         TRACKED);
+    fill(current_keypoint_statuses_.begin(), current_keypoint_statuses_.end(), TRACKED);
 
     images_from_last_reference_ = 0;
 
@@ -211,6 +210,31 @@ std::vector<int> MonocularMapInitializer::FeatureTracksClustering() {
     }
 
     vector<int> point_labels = DbscanND(plain_feature_tracks);
+
+    // 新增：输出聚类结果
+    // std::map<int, int> label_counts;
+    // for (int label : point_labels) {
+    //     label_counts[label]++;
+    // }
+    // std::cout << "Feature Tracks Clustering Results:\n";
+    // std::cout << "Total Tracks: " << point_labels.size() << "\n";
+    // for (const auto& [label, count] : label_counts) {
+    //     if (label == -1) {
+    //         std::cout << "Noise: " << count << " tracks (" 
+    //                   << (100.0 * count / point_labels.size()) << "%)\n";
+    //     } else {
+    //         std::cout << "Cluster " << label << ": " << count << " tracks\n";
+    //     }
+    // }
+    // std::vector<float> flow_magnitudes;
+    // for (const auto& track : plain_feature_tracks) {
+    //     float norm = track.norm(); // 光流向量范数
+    //     flow_magnitudes.push_back(norm);
+    // }
+    // std::cout << "Flow Magnitude Stats:\n";
+    // float mean = std::accumulate(flow_magnitudes.begin(), flow_magnitudes.end(), 0.0) / flow_magnitudes.size();
+    // std::cout << "Mean: " << mean << ", Max: " << *std::max_element(flow_magnitudes.begin(), flow_magnitudes.end())
+    //         << ", Min: " << *std::min_element(flow_magnitudes.begin(), flow_magnitudes.end()) << "\n";
 
     // Draw clustered tracks.
     image_visualizer_->DrawClusteredOpticalFlow(feature_tracks, point_labels);

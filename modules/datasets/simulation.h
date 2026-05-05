@@ -21,6 +21,8 @@
 #define NRSLAM_SIMULATION_H
 
 #include <string>
+#include <fstream>
+#include <sstream>
 
 #include "absl/status/statusor.h"
 
@@ -36,6 +38,10 @@ public:
     absl::StatusOr<cv::Mat> GetDepthImage(const int idx);
 
     absl::StatusOr<Sophus::SE3f> GetCameraPose(const int idx);
+
+    absl::StatusOr<cv::Mat> GetNNImage(const int idx);
+
+    bool readPFM(const std::string& filename, cv::Mat& image);
 
 private:
     void GenerateNamesFile(const std::string& images_path);

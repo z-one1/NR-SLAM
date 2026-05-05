@@ -21,6 +21,7 @@
 #define NRSLAM_ENDOMAPPER_H
 
 #include <string>
+#include <fstream>
 
 #include "absl/status/statusor.h"
 

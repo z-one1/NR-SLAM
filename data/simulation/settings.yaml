@@ -18,9 +18,9 @@ Visualization.cameraSize: 0.5
 System.autoplay: 1
 
 # Set the below variables to valid paths to save outputs
-MapVisualizer.save_path: ""
-ImageVisualizer.save_path: ""
-Evaluation.save_path: ""
+MapVisualizer.save_path: "outputs/map"
+ImageVisualizer.save_path: "outputs/img"
+Evaluation.save_path: "/home/zy/NR-SLAM/log/eva_rmse.txt"
 
 MapVisualizer.left_view: !!opencv-matrix
   rows: 4
@@ -39,3 +39,48 @@ MapVisualizer.right_view: !!opencv-matrix
     -0.0225534, -0.975838, -0.217329, 0.277943,
     -0.979066, 0.0655449, -0.192703, -5.8181,
           0.0,          0.0,        0.0,        1.0 ]
+
+# Optional SDF integration parameters.
+SDF.voxel_size: 0.0025
+SDF.truncation_distance: 0.0100
+SDF.dense_pixel_stride: 2
+SDF.dense_weight: 1.0
+SDF.sparse_weight: 5.0
+SDF.max_voxel_updates_per_frame: 300000
+SDF.min_depth: 0.01
+SDF.max_depth: 8.00
+SDF.sparse_min_points: 20
+
+# Optional SurfMap-SDF coupling parameters.
+SurfelSDF.constraint_enabled: 0
+SurfelSDF.phi_abs_threshold: 0.20
+SurfelSDF.normal_cos_threshold: 0.30
+SurfelSDF.project_to_surface: 0
+
+# Balanced surfel map defaults.
+SurfMap.window_size: 8
+SurfMap.min_depth: 0.02
+SurfMap.max_depth: 1.00
+SurfMap.default_surfel_radius: 0.003
+SurfMap.use_adaptive_radius: 1
+SurfMap.surfel_sample_step: 2
+SurfMap.max_new_surfels_per_frame: 45000
+SurfMap.fusion_distance_threshold: 0.01
+SurfMap.fusion_normal_threshold: 0.85
+SurfMap.spatial_search_radius: 0.02
+SurfMap.active_min_depth: 0.02
+SurfMap.active_max_depth: 0.10
+SurfMap.confidence_decay_rate: 0.10
+SurfMap.min_surfel_confidence: 0.30
+SurfMap.warp_sigma: 0.03
+SurfMap.warp_max_disp: 0.10
+SurfMap.quality_mode: "balanced"
+SurfMap.min_surfel_radius: 0.001
+SurfMap.max_surfel_radius: 0.006
+SurfMap.radius_scale: 1.35
+SurfMap.max_depth_gradient: 0.030
+SurfMap.mask_border_pixels: 1
+SurfMap.max_fused_surfels_per_frame: 30000
+SurfMap.max_added_surfels_per_frame: 15000
+SurfMap.color_update_max_residual: 0.35
+SurfMap.color_update_soft_residual: 0.15

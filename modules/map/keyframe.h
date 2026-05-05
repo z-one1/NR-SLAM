@@ -70,12 +70,18 @@ public:
     std::vector<absl::StatusOr<Eigen::Vector3f>> GetGroundTruthWithStatus(
             const absl::flat_hash_set<LandmarkStatus> statuses);
 
+    const std::vector<Eigen::Vector3f>& Deformations() const;
+    std::vector<Eigen::Vector3f>& MutableDeformations();
+
 private:
     std::vector<cv::KeyPoint> keypoints_;
     std::vector<Eigen::Vector3f> landmark_positions_;
     std::vector<LandmarkStatus> landmark_status_;
 
     std::vector<absl::StatusOr<Eigen::Vector3f>> landmark_ground_truth_;
+
+    // 该帧对应的每路标形变向量（从 Frame 拷贝，用于后续 BA 提供形变先验）
+    std::vector<Eigen::Vector3f> deformations_;
 
     absl::flat_hash_map<ID, int> mappoint_id_to_index_;
     absl::flat_hash_map<int, ID> index_to_mappoint_id_;
